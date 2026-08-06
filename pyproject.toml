@@ -1,0 +1,57 @@
+[tool.uv.workspace]
+members = ["origo-edge", "origo-info-adapter"]
+
+[tool.uv.sources]
+origo-info-adapter = { workspace = true }
+
+# ---- shared tool config: one place, both packages ----
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["origo-edge/src", "origo-info-adapter/src"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",      # pycodestyle / pyflakes
+  "I",                # isort
+  "N",                # pep8-naming
+  "UP",               # pyupgrade
+  "B",                # bugbear
+  "A",                # builtins shadowing
+  "C4",               # comprehensions
+  "DTZ",              # naive-datetime ban  <-- important here
+  "T20",              # no print()
+  "SIM", "RET", "ARG", "PTH",
+  "ASYNC",            # blocking calls in async defs
+  "S",                # bandit
+  "TID252",           # no relative imports beyond one level
+  "ANN",              # require annotations
+  "RUF",
+]
+ignore = ["ANN401"]   # allow Any where genuinely needed
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "ANN", "ARG"]
+"**/_proto/**" = ["ALL"]            # generated code
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.utcnow".msg = "Use origo_*.clock.utcnow() — tz-aware."
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+exclude = ["_proto/", "migrations/versions/"]
+
+[[tool.mypy.overrides]]
+module = ["stellarstation.*", "grpc.*", "google.auth.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers --strict-config"
+markers = [
+  "integration: requires live StellarStation credentials (deselected by default)",
+]
+filterwarnings = ["error"]

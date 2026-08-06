@@ -1,17 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "origo-info-adapter"
 version = "0.1.0"
-description = "Adapter layer between Origo Edge APIs and Infostellar StellarStation APIs"
-requires-python = "^3.11"
+description = "Ground-network adapter port and StellarStation implementation for Origo"
+requires-python = ">=3.12"
 dependencies = [
-  "httpx>=0.28.0",
-  "grpcio>=1.56.0",
-  "google-auth>=2.20.0",
-  "google-auth-jwt>=1.0.0",
-  "stellarstation>=0.14.0",
-  "protobuf>=4.23.0",
+  "grpcio>=1.66",
+  "protobuf>=5.27",
+  "google-auth>=2.34",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.4",
+  "structlog>=24.4",
 ]
 
-[tool.flake8]
-max-line-length = 120
-exclude = ["__pycache__", "build", "dist"]
+[project.optional-dependencies]
+dev = [
+  "grpcio-tools>=1.66",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "mypy>=1.11",
+  "ruff>=0.6",
+  "types-protobuf",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/origo_info_adapter"]
+
+# _proto is generated; include it in the wheel but never in git
+[tool.hatch.build.targets.wheel.force-include]
+"src/origo_info_adapter/_proto" = "origo_info_adapter/_proto"

@@ -1,1 +1,0 @@
-"""Origo Info Adapter package."""
