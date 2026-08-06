@@ -1,0 +1,17 @@
+[project]
+name = "origo-info-adapter"
+version = "0.1.0"
+description = "Adapter layer between Origo Edge APIs and Infostellar StellarStation APIs"
+requires-python = "^3.11"
+dependencies = [
+  "httpx>=0.28.0",
+  "grpcio>=1.56.0",
+  "google-auth>=2.20.0",
+  "google-auth-jwt>=1.0.0",
+  "stellarstation>=0.14.0",
+  "protobuf>=4.23.0",
+]
+
+[tool.flake8]
+max-line-length = 120
+exclude = ["__pycache__", "build", "dist"]
