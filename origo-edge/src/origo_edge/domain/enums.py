@@ -4,8 +4,8 @@ from enum import StrEnum
 
 
 class DeviceType(StrEnum):
-    SATELLITE_MODULE = "SATELLITE_MODULE"
-    GROUND_HSM = "GROUND_HSM"
+    ORIGO_SPACE = "ORIGO_SPACE"
+    ORIGO_TERRESTRIAL = "ORIGO_TERRESTRIAL"
 
 
 class DeviceStatus(StrEnum):

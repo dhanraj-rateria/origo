@@ -452,7 +452,7 @@ Mission {
  
 Device {
   device_id: UUID
-  type: enum [SATELLITE_MODULE, GROUND_HSM]
+  type: enum [ORIGO_SPACE, ORIGO_TERRESTRIAL]
   mission_id: UUID -> Mission
   public_identity_key: bytes        // ML-DSA verification key
   device_cert_chain: bytes
@@ -475,7 +475,7 @@ GroundStation {
   provider: enum [AWS_GROUND_STATION, KSAT, LEAF_SPACE, ATLAS, OTHER]
   provider_site_id: string          // the provider's own station identifier
   location: { lat: float, lon: float }
-  ground_hsm_device_id: UUID -> Device
+  ORIGO_TERRESTRIAL_device_id: UUID -> Device
   edge_agent_id: UUID
 }
  

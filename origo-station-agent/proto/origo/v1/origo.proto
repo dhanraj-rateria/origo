@@ -1,0 +1,51 @@
+syntax = "proto3";
+package origo.v1;
+
+service OrigoTerrestrialService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc VerifyAndEncapsulate(VerifyAndEncapsulateRequest) returns (VerifyAndEncapsulateResponse);
+  rpc DecryptPayload(DecryptPayloadRequest) returns (DecryptPayloadResponse);
+  rpc ApplyConfig(ApplyConfigRequest) returns (ApplyConfigResponse);
+}
+
+message HealthRequest {}
+message HealthResponse {
+  bool tamper_clear = 1;
+  bool entropy_healthy = 2;
+  bool self_test_passed = 3;
+  string active_key_id = 4;
+  uint32 error_count = 5;
+  float temperature_c = 6;
+}
+
+// Verify the satellite's signature on `ek`, reject on a bad
+// signature or replayed nonce, then Encapsulate(ek) -> (K, ct), then sign `ct`.
+message VerifyAndEncapsulateRequest {
+  bytes ek = 1;
+  bytes signature = 2;
+  string device_id = 3;
+  bytes nonce = 4;
+}
+message VerifyAndEncapsulateResponse {
+  bytes ciphertext = 1;
+  bytes signature = 2;
+  string key_id = 3;
+}
+
+// AEAD-decrypt one data-delivery frame under the named session key.
+// sequence_number lets the HSM enforce anti-replay itself, not the caller.
+message DecryptPayloadRequest {
+  string key_id = 1;
+  bytes ciphertext = 2;
+  uint64 sequence_number = 3;
+}
+message DecryptPayloadResponse {
+  bytes plaintext = 1;
+}
+
+// The ground PQC HSM module verifies the signature itself before applying anything. This RPC
+// is a delivery mechanism, not a trust decision made by this process.
+message ApplyConfigRequest {
+  bytes signed_config = 1;
+}
+message ApplyConfigResponse {}
