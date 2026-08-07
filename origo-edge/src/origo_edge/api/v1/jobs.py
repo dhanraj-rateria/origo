@@ -30,8 +30,7 @@ def _job_out(job) -> dict[str, object]:  # noqa: ANN001
 
 @router.get("/jobs")
 async def list_jobs(jobs: Annotated[JobService, Depends(get_job_service)]) -> list[dict[str, object]]:
-    return [_job_out(j) for j in await jobs._jobs.list()]  # noqa: SLF001 — see note below
-
+    return [_job_out(j) for j in await jobs.list()]
 
 @router.post("/jobs", status_code=202)
 async def create_job(body: JobCreate, jobs: Annotated[JobService, Depends(get_job_service)]) -> dict[str, object]:

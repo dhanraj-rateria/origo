@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
-
-from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 
 from ...domain.enums import DeviceStatus, DeviceType
 from ...repositories.device import DeviceRepository
@@ -11,6 +11,11 @@ from ..deps import get_device_repo
 
 router = APIRouter(prefix="/v1", tags=["devices"])
 
+class DeviceCreate(BaseModel):
+    name: str
+    type: DeviceType
+    serial_number: str
+    mission: str | None = None
 
 @router.get("/devices")
 async def list_devices(devices: Annotated[DeviceRepository, Depends(get_device_repo)]) -> list[dict[str, object]]:
@@ -25,13 +30,12 @@ async def list_devices(devices: Annotated[DeviceRepository, Depends(get_device_r
 
 @router.post("/devices", status_code=201)
 async def register_device(
-    body: dict[str, str], devices: Annotated[DeviceRepository, Depends(get_device_repo)],
+    body: DeviceCreate, devices: Annotated[DeviceRepository, Depends(get_device_repo)],
 ) -> dict[str, object]:
-    """Minimal registration for local dev/seeding. Design §8.3: real registration is
-    the last step of a provisioning ceremony, not an open call — this is a placeholder
-    to seed a working local database, not the production endpoint."""
+    if await devices.get_by_serial(body.serial_number) is not None:
+        raise HTTPException(409, detail=f"serial_number '{body.serial_number}' is already registered")
     device = await devices.create(
-        name=body["name"], type=DeviceType(body["type"]), mission=body.get("mission"),
-        status=DeviceStatus.ACTIVE,
+        name=body.name, type=body.type, serial_number=body.serial_number,
+        mission=body.mission, status=DeviceStatus.ACTIVE,
     )
     return {"id": str(device.id), "name": device.name, "type": device.type.value}

@@ -39,3 +39,12 @@ class KeyRepository:
         self._session.add(key)
         await self._session.flush()
         return key
+
+    async def list_in_flight_for_pair(self, *, satellite_device_id: uuid.UUID, ground_device_id: uuid.UUID) -> list[Key]:
+        from ..domain.key_lifecycle import IN_FLIGHT_STATES
+        stmt = select(Key).where(
+            Key.satellite_device_id == satellite_device_id,
+            Key.ground_device_id == ground_device_id,
+            Key.state.in_(IN_FLIGHT_STATES),
+        )
+        return list((await self._session.execute(stmt)).scalars())

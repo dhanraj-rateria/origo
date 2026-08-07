@@ -1,0 +1,29 @@
+The three questions
+
+Why gRPC for Origo Terrestrial? A few reasons stack up, not just one:
+
+The interface (VerifyAndEncapsulate, DecryptPayload, ApplyConfig, Health) is small, fixed, and moves binary payloads — ek, signatures, ciphertext — where a field-order or type mistake would silently corrupt crypto material. Protobuf gives a compile-time-checked contract on both ends, which matters more here than on a typical internal API.
+Per-call deadlines are built in (timeout= on every stub call already in grpc_client.py), which maps directly onto §3.3.3's timeout_sec per step — a raw socket would need that hand-rolled.
+Status codes translate cleanly onto OrigoRejected (a security event — bad signature, replay) vs. OrigoUnavailable (infrastructure) — the exact same pattern origo_info_adapter already uses for StellarStation, so the codebase only has to reason about one RPC paradigm and one error-translation idiom, not two.
+Origo Terrestrial's firmware is very likely C/C++ (it's running wolfCrypt), and protoc's C/C++ output is first-class — a hand-rolled binary protocol would mean maintaining a parser in two languages by hand instead of generating both from one .proto.
+grpc.aio matches the rest of the stack's async architecture, so nothing here needs a thread pool or blocking-call shim.
+
+The one honest caveat: this assumes Origo Terrestrial's side can run a real gRPC server. If it ends up on genuinely bare-metal, no-OS firmware (one of the three wolfCrypt strategies from earlier), a full HTTP/2 gRPC stack may be too heavy, and the fallback is "keep the .proto-defined message types for serialization, drop the gRPC/HTTP2 transport machinery for something thinner over UART/SPI." That's exactly why OrigoTerrestrial is a Protocol in origo/ports.py rather than pass_executor.py calling grpc directly — that fallback is a swap in grpc_client.py alone, not a rewrite.
+
+REST for origo-edge and origo-platform — confirmed, yes. api/v1/*.py is plain FastAPI (@router.get, @router.post, JSON in/out), and shared/api/client.ts is a typed fetch() wrapper — HTTP verbs and resource paths, not gRPC-Web or GraphQL. That's deliberate, not incidental: a dashboard's call volume is low and latency-insensitive compared to a live pass, so the priority flips to developer ergonomics — curl-able, browser-devtools-inspectable, OpenAPI-documented, and it generates the TypeScript client for free (the Makefile's openapi target). There are actually three API surfaces in this system, each matched to what it's for:
+
+Link	Style	Auth	Why
+Dashboard ↔ origo-edge	REST/JSON	OIDC	human-facing, low frequency, wants debuggability
+station-agent ↔ origo-edge (sync)	REST/JSON	device token → mTLS	still low-frequency polling, same tooling benefit
+station-agent ↔ Origo Terrestrial, adapter ↔ StellarStation	gRPC	mTLS / signed JWT	live, pass-time-critical, needs deadlines + streaming
+
+Hardware for the box running station-agent + info-adapter, next to Origo Terrestrial. Neither process does any cryptography — that's entirely Origo Terrestrial's job. Both are I/O-bound: waiting on sockets, (de)serializing KB-scale protobuf/JSON, logging. That workload doesn't need crypto acceleration, a GPU/NPU, or a many-core CPU. A defensible spec:
+
+CPU: dual/quad-core ARM Cortex-A53/A72-class (or equivalent low-power x86), ~1–1.5 GHz+. Comfortable, not tight — a Raspberry Pi CM4-class part is generous headroom for this specific workload, not a minimum you're pushing against.
+RAM: 2 GB is a safe floor; 4 GB buys years of feature growth (local caching, larger telemetry buffers) without a hardware refresh.
+Storage: 16–32 GB eMMC/SSD — OS + Python/deps + a real local log/telemetry retention window for the "keep running on last-known state during a Platform outage" principle from §3.3.
+Network: wired Gigabit Ethernet out to origo-edge and StellarStation. Bandwidth needs scale with the mission's payload data rate (imagery volume etc.), not with control-plane traffic, which is tiny — that's a per-mission number I don't have, not a fixed platform requirement.
+OS: a real embedded Linux, glibc-based rather than musl (grpcio's C extensions have more friction on Alpine). This needs a full POSIX userspace for asyncio/grpcio/httpx — it is not bare-metal or RTOS territory, unlike Origo Terrestrial itself.
+Environment: industrial temperature range and conformal coating are worth budgeting for — a ground-station shelter isn't necessarily climate-controlled to server-room standards.
+
+One thing worth keeping in your back pocket for the Origo module conversation: if Origo Terrestrial lands on a Zynq-7000-class part, its PS side (dual-core Cortex-A9, running embedded Linux) could plausibly host station-agent and info-adapter directly — making "same hardware" literal (one chip) rather than "same enclosure, second board." Worth revisiting once that hardware decision is made rather than now.

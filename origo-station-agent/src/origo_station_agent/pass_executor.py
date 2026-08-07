@@ -8,6 +8,7 @@ needed was pulled by the Sync Client before AOS.
 from __future__ import annotations
 
 import asyncio
+import struct
 from datetime import datetime
 from enum import StrEnum, auto
 from uuid import UUID, uuid4
@@ -193,18 +194,39 @@ class _KemEnvelope:
         self.ek, self.signature, self.device_id, self.nonce = ek, signature, device_id, nonce
 
 
+def _pack(*parts: bytes) -> bytes:
+    out = bytearray()
+    for p in parts:
+        out += struct.pack(">I", len(p)) + p
+    return bytes(out)
+
+
+def _unpack(data: bytes, count: int) -> list[bytes] | None:
+    out, offset = [], 0
+    for _ in range(count):
+        if offset + 4 > len(data):
+            return None
+        (length,) = struct.unpack(">I", data[offset:offset + 4])
+        offset += 4
+        if offset + length > len(data):
+            return None
+        out.append(data[offset:offset + length])
+        offset += length
+    return out
+
+
+_KEM_MAGIC = b"OSKX"
+
+
 def _parse_kem_envelope(data: bytes) -> _KemEnvelope | None:
-    """Deserialise the framing carrying ek+signature+device_id+nonce off the downlink.
-    This byte-level envelope format isn't specified anywhere yet — pick
-    a small TLV or length-prefixed layout and put it here and in the Module firmware's
-    encoder as each other's only spec. Returns None for a frame that isn't this format,
-    so unrelated traffic on the same link is ignored rather than raising."""
-    raise NotImplementedError
+    if not data.startswith(_KEM_MAGIC):
+        return None
+    fields = _unpack(data[len(_KEM_MAGIC):], 4)
+    if fields is None:
+        return None
+    ek, sig, device_id, nonce = fields
+    return _KemEnvelope(ek=ek, signature=sig, device_id=device_id.decode(), nonce=nonce)
 
 
 def _frame_ct(ciphertext: bytes, signature: bytes) -> list[bytes]:
-    """Inverse of the above for the uplink direction (§5.2 step 6). ml-kem-1024's ct
-    (1568 B) plus an ML-DSA-87 signature (several KB) may need splitting across more
-    than one command in the burst — send_commands() already accepts a sequence for
-    exactly this."""
-    raise NotImplementedError
+    return [_KEM_MAGIC + _pack(ciphertext, signature)]

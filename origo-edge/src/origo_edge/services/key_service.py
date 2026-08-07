@@ -34,6 +34,12 @@ class KeyService:
         if sat.status is not DeviceStatus.ACTIVE or gnd.status is not DeviceStatus.ACTIVE:
             raise PolicyViolation("both devices must be ACTIVE to establish a key")
 
+        in_flight = await self._keys.list_in_flight_for_pair(satellite_device_id=satellite_device_id, ground_device_id=ground_device_id)
+        if in_flight:
+            raise PolicyViolation(
+                f"a key exchange is already in flight for this pair (key {in_flight[0].id}, state {in_flight[0].state.value})"
+            )
+
         return await self._keys.create(
             satellite_device_id=satellite_device_id, ground_device_id=ground_device_id,
             kem_param_set=kem_param_set, state=KeyState.PENDING_KEYGEN,

@@ -42,3 +42,6 @@ class JobService:
         if job is None:
             raise NotFound("job", job_id)
         return job
+
+    async def list(self) -> list[Job]:
+        return await self._jobs.list()

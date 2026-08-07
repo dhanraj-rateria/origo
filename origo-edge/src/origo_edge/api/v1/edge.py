@@ -21,29 +21,31 @@ router = APIRouter(prefix="/v1/edge", tags=["edge"], dependencies=[Depends(requi
 
 
 @router.get("/stations/{station_ref}/job-plans")
-async def get_job_plans(station_ref: str, jobs: Annotated[JobRepository, Depends(get_job_repo)]) -> dict[str, object]:
+async def get_job_plans(
+    station_ref: str,
+    jobs: Annotated[JobRepository, Depends(get_job_repo)],
+    devices: Annotated[DeviceRepository, Depends(get_device_repo)],
+) -> dict[str, object]:
     import uuid as _uuid
+    from ...domain.enums import DeviceType, JobState
 
-    scheduled = await jobs.list(states=None)  # station_device_id filter: see note below
+    station = await devices.get_by_serial(station_ref)
+    if station is None or station.type is not DeviceType.ORIGO_TERRESTRIAL:
+        return {"items": []}   # unknown station asks for nothing, not an error
+
+    scheduled = await jobs.list(station_device_id=station.id, states=[JobState.SCHEDULED])
     now = datetime.now(UTC)
-    items = [
-        {
-            "plan_id": str(_uuid.uuid4()),
-            "ground_station_id": station_ref,
-            "pass_id": str(_uuid.uuid4()),
-            "valid_from": now.isoformat(),
-            "valid_until": (now + timedelta(minutes=15)).isoformat(),
-            "steps": [
-                {
-                    "step_id": str(_uuid.uuid4()), "job_id": str(job.id), "job_type": job.type.value,
-                    "expected_start_offset_sec": 0, "timeout_sec": 300,
-                    "parameters": job.parameters | ({"channel_set_ref": "cs-s-band"} if job.type.value == "KEY_EXCHANGE" else {}),
-                }
-                for job in scheduled if job.state.value == "SCHEDULED"
-            ],
-            "signature": "", "signed_payload": "",
-        }
-    ]
+    items = [{
+        "plan_id": str(_uuid.uuid4()), "ground_station_id": station_ref,
+        "pass_id": str(_uuid.uuid4()), "valid_from": now.isoformat(),
+        "valid_until": (now + timedelta(minutes=15)).isoformat(),
+        "steps": [{
+            "step_id": str(_uuid.uuid4()), "job_id": str(job.id), "job_type": job.type.value,
+            "expected_start_offset_sec": 0, "timeout_sec": 300,
+            "parameters": job.parameters | ({"channel_set_ref": "cs-s-band"} if job.type.value == "KEY_EXCHANGE" else {}),
+        } for job in scheduled],
+        "signature": "", "signed_payload": "",
+    }]
     return {"items": items}
 
 

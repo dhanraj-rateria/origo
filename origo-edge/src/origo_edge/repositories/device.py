@@ -28,3 +28,7 @@ class DeviceRepository:
         self._session.add(device)
         await self._session.flush()
         return device
+
+    async def get_by_serial(self, serial_number: str) -> Device | None:
+        stmt = select(Device).where(Device.serial_number == serial_number)
+        return (await self._session.execute(stmt)).scalar_one_or_none()
