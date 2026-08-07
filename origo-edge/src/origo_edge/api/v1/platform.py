@@ -1,49 +1,36 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+
+from ...domain.enums import DeviceType, KeyState
+from ...repositories.device import DeviceRepository
+from ...repositories.key import KeyRepository
+from ..deps import get_device_repo, get_key_repo
 
 router = APIRouter(prefix="/v1", tags=["platform"])
 
 
 @router.get("/overview")
-async def overview() -> dict[str, int]:
+async def overview(
+    devices: Annotated[DeviceRepository, Depends(get_device_repo)],
+    keys: Annotated[KeyRepository, Depends(get_key_repo)],
+) -> dict[str, int]:
+    all_devices = await devices.list()
+    all_keys = await keys.list()
     return {
-        "satellites": 3,
-        "ground_stations": 2,
-        "active_keys": 5,
-        "open_alerts": 2,
+        "satellites": sum(1 for d in all_devices if d.type is DeviceType.ORIGO_SPACE),
+        "ground_stations": sum(1 for d in all_devices if d.type is DeviceType.ORIGO_TERRESTRIAL),
+        "active_keys": sum(1 for k in all_keys if k.state is KeyState.ACTIVE),
+        "open_alerts": 2,  # unchanged — alerts table doesn't exist yet
     }
-
-
-@router.get("/devices")
-async def devices() -> list[dict[str, str]]:
-    return [
-        {"id": "dev-001", "name": "Aster-1", "type": "Satellite", "mission": "Asteroid survey", "status": "Active", "last_contact": "2m ago"},
-        {"id": "dev-002", "name": "GS-North", "type": "Ground station", "mission": "Primary TT&C", "status": "Active", "last_contact": "10m ago"},
-    ]
-
 
 @router.get("/passes")
 async def passes() -> list[dict[str, str]]:
     return [
         {"reservation_token": "tok-001", "satellite": "Aster-1", "ground_station": "GS-North", "band": "S-band", "aos": "2026-08-06T09:15:00Z", "los": "2026-08-06T09:23:00Z", "elevation": "47.2°"},
         {"reservation_token": "tok-002", "satellite": "Aster-2", "ground_station": "GS-South", "band": "X-band", "aos": "2026-08-06T10:10:00Z", "los": "2026-08-06T10:20:00Z", "elevation": "61.8°"},
-    ]
-
-
-@router.get("/jobs")
-async def jobs() -> list[dict[str, str]]:
-    return [
-        {"id": "job-001", "type": "key", "route": "Aster-1 → GS-North", "state": "active", "created": "11m ago"},
-        {"id": "job-002", "type": "data", "route": "Aster-2 → GS-South", "state": "scheduled", "created": "38m ago"},
-    ]
-
-
-@router.get("/keys")
-async def keys() -> list[dict[str, str]]:
-    return [
-        {"id": "KEY-8830", "route": "Aster-1 → GS-North", "parameter_set": "ML-KEM-1024", "state": "Active", "created": "2h ago"},
-        {"id": "KEY-8829", "route": "Aster-2 → GS-South", "parameter_set": "ML-KEM-768", "state": "Superseded", "created": "5h ago"},
     ]
 
 

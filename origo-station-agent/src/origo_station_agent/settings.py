@@ -18,6 +18,10 @@ class StationAgentSettings(BaseSettings):
     device_key_path: Path
     ca_bundle_path: Path
 
-    origo_endpoint: str
+    # Same physical hardware as Origo Terrestrial: a Unix domain socket, not a network
+    # endpoint. grpc-python accepts this target form natively — no separate "transport
+    # kind" flag needed, the scheme in the string is enough.
+    # e.g. "unix:///var/run/origo/origo-terrestrial.sock"
+    origo_endpoint: str = "unix:///var/run/origo/origo-terrestrial.sock"
 
     poll_interval_sec: int = Field(default=60, ge=5)

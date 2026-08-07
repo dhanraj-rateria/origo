@@ -11,6 +11,9 @@ install:            ## sync all deps (python + node)
 proto:              ## regenerate StellarStation stubs from vendored .proto
 	$(PY) python origo-info-adapter/scripts/gen_proto.py
 
+proto-origo:        ## regenerate Origo Terrestrial stubs
+	$(PY) python origo-station-agent/scripts/gen_proto.py
+
 lint:               ## ruff + mypy + eslint
 	$(PY) ruff format --check .
 	$(PY) ruff check .

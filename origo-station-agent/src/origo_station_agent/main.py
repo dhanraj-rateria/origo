@@ -1,10 +1,4 @@
-"""Process entrypoint: sync loop + AOS-triggered pass execution.
-
-AOS/LOS detection is deliberately left unimplemented here — it's genuinely
-deployment-specific (a scheduler keyed off the JobPlan's own timing, an
-antenna-controller signal, a GPIO edge) in a way the rest of this module isn't. This
-shows the wiring; the trigger is a decision for whoever owns the physical site.
-"""
+"""Process entrypoint: sync loop + AOS-triggered pass execution."""
 
 from __future__ import annotations
 
@@ -30,7 +24,14 @@ async def run() -> None:
         ca_bundle=str(settings.ca_bundle_path),
         station_ref=settings.station_ref,
     )
-    origo_channel = grpc.aio.secure_channel(settings.origo_endpoint, grpc.ssl_channel_credentials())
+
+    # Same-hardware link to Origo Terrestrial: insecure_channel, because "insecure"
+    # here means "no TLS transport", not "no protection" — a Unix socket's protection
+    # is the filesystem permission on the socket file (see step-by-step §1 below), and
+    # layering TLS on top of a link that never leaves the machine buys nothing but
+    # certificate rotation to manage. Nothing about the KEM/HSM authentication story
+    # changes: ek/ct are still signed at the application layer regardless of transport.
+    origo_channel = grpc.aio.insecure_channel(settings.origo_endpoint)
     origo = GrpcOrigoTerrestrial(channel=origo_channel)
     adapter = build_adapter()
     await adapter.start()
@@ -41,12 +42,12 @@ async def run() -> None:
         station_ref=settings.station_ref,
     )
 
-    log.info("station_agent.started", station_ref=settings.station_ref)
+    log.info("station_agent.started", station_ref=settings.station_ref, origo_endpoint=settings.origo_endpoint)
     try:
         while True:
             plans = await sync.fetch_job_plans()
             for plan in plans:
-                # await the plan's window (AOS trigger — see module docstring), then:
+                # await the plan's window (AOS trigger — deployment-specific), then:
                 # results = await executor.run(plan=plan, contact_id=..., now=...)
                 # await sync.push_status(events=_results_to_events(plan, results))
                 pass

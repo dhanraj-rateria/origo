@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     default_page_limit: int = Field(default=50, ge=1, le=500)
     max_page_limit: int = Field(default=500, ge=1, le=1000)
 
+    edge_device_token: str = "dev-only-change-me"
+
     @model_validator(mode="after")
     def _guard_production(self) -> Self:
         if self.env == "prod":
