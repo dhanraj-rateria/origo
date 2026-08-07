@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from ..settings import Settings
 
+from fastapi import Request
+
 def build_engine(settings: Settings) -> AsyncEngine:
     return create_async_engine(
         str(settings.database_url).replace("postgresql://", "postgresql+asyncpg://", 1),
@@ -17,7 +19,7 @@ def build_engine(settings: Settings) -> AsyncEngine:
 def build_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(engine, expire_on_commit=False)
 
-async def get_session(request) -> AsyncIterator[AsyncSession]:  # FastAPI dependency
+async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     sessionmaker = request.app.state.sessionmaker
     async with sessionmaker() as session, session.begin():
         yield session
