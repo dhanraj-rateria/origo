@@ -10,14 +10,14 @@ import pytest
 from origo_info_adapter import ChannelSetRef, ContactId, SatelliteRef
 from origo_info_adapter.fake.adapter import InMemoryAdapter
 from origo_crypto.wolfcrypt_engine import WolfCryptEngine
-from origo_space_sw.agent import OrigoSpaceAgent
-from origo_space_sw.identity import IdentityStore as SpaceIdentity
+from origo_space.agent import OrigoSpaceAgent
+from origo_space.identity import IdentityStore as SpaceIdentity
 from origo_station_agent.models import JobPlan, JobPlanStep, JobType
 from origo_station_agent.origo.grpc_client import GrpcOrigoTerrestrial
 from origo_station_agent.pass_executor import PassExecutor
-from origo_terrestrial_sw.identity import IdentityStore as TerrestrialIdentity
-from origo_terrestrial_sw.service import OrigoTerrestrialServicer
-from origo_terrestrial_sw._proto.origo.v1 import origo_pb2_grpc as pb_grpc
+from origo_terrestrial.identity import IdentityStore as TerrestrialIdentity
+from origo_terrestrial.service import OrigoTerrestrialServicer
+from origo_terrestrial._proto.origo.v1 import origo_pb2_grpc as pb_grpc
 
 
 @pytest.mark.asyncio

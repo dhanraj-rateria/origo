@@ -1,4 +1,3 @@
-# origo-space-sw/src/origo_space_sw/agent.py
 """Software Origo Space. Deliberately simple, per the 'no policy' correction: this
 performs one key exchange when called — no standing loop, no condition-watching. The
 'when' is someone else's decision (a script invocation for now; a real trigger from
@@ -14,7 +13,7 @@ from pathlib import Path
 from origo_crypto.engine import CryptoEngine, KemKeypair
 from origo_crypto.envelope import pack_ek_envelope, parse_ct_envelope
 
-from .identity import IdentityStore
+from origo_terrestrial.identity import IdentityStore
 
 
 @dataclass

@@ -9,9 +9,19 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "origo-crypto",
     "origo-edge",
     "origo-info-adapter",
+    "origo-space",
     "origo-station-agent",
+    "origo-terrestrial",
+]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
 ]
 
 [[package]]
@@ -1192,6 +1202,11 @@ wheels = [
 ]
 
 [[package]]
+name = "origo-crypto"
+version = "0.1.0"
+source = { editable = "origo-crypto" }
+
+[[package]]
 name = "origo-edge"
 version = "0.1.0"
 source = { editable = "origo-edge" }
@@ -1294,6 +1309,11 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [[package]]
+name = "origo-space"
+version = "0.1.0"
+source = { editable = "origo-space" }
+
+[[package]]
 name = "origo-station-agent"
 version = "0.1.0"
 source = { editable = "origo-station-agent" }
@@ -1334,6 +1354,11 @@ requires-dist = [
     { name = "tenacity", specifier = ">=9.0" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "origo-terrestrial"
+version = "0.1.0"
+source = { editable = "origo-terrestrial" }
 
 [[package]]
 name = "orjson"

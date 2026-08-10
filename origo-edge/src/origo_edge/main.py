@@ -1,4 +1,3 @@
-# main.py
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -14,6 +13,9 @@ from .api.v1.devices import router as devices_router
 from .api.v1.edge import router as edge_router
 from .api.v1.jobs import router as jobs_router
 from .api.v1.keys import router as keys_router
+from .api.v1.alerts import router as alerts_router
+from .api.v1.passes import router as passes_router
+from .api.v1.telemetry import router as telemetry_router
 from .api.v1.platform import router as platform_router
 from .db.session import build_engine, build_sessionmaker
 from .settings import Settings, get_settings
@@ -56,7 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     install_exception_handlers(app)
-    for r in (devices_router, keys_router, jobs_router, edge_router, platform_router):
+    for r in (devices_router, keys_router, jobs_router, edge_router, platform_router, alerts_router, passes_router, telemetry_router):
         app.include_router(r)
 
     @app.get("/v1/health/live")

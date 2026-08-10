@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["origo-edge", "origo-info-adapter", "origo-station-agent"]
+members = ["origo-edge", "origo-info-adapter", "origo-station-agent", "origo-crypto", "origo-space", "origo-terrestrial"]
 
 [tool.uv.sources]
 origo-info-adapter = { workspace = true }
@@ -55,3 +55,10 @@ markers = [
   "integration: requires live StellarStation credentials (deselected by default)",
 ]
 filterwarnings = ["error"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+]
