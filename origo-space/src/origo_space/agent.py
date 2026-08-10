@@ -1,6 +1,4 @@
-# origo-space-sw/src/origo_space_sw/agent.py
-"""Software Origo Space. Deliberately simple, per the 'no policy' correction: this
-performs one key exchange when called — no standing loop, no condition-watching. The
+"""Software Origo Space. Performs one key exchange when called. The
 'when' is someone else's decision (a script invocation for now; a real trigger from
 OBC/flight software once this becomes firmware)."""
 

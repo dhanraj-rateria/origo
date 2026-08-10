@@ -14,7 +14,7 @@ from pathlib import Path
 from origo_crypto.engine import CryptoEngine, KemKeypair
 from origo_crypto.envelope import pack_ek_envelope, parse_ct_envelope
 
-from .identity import IdentityStore   # same shape as origo_terrestrial_sw.identity
+from .identity import IdentityStore
 
 
 @dataclass

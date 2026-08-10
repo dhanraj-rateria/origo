@@ -1,4 +1,3 @@
-# origo-terrestrial-sw/src/origo_terrestrial_sw/server.py
 from __future__ import annotations
 
 import asyncio

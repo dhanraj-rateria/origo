@@ -1,4 +1,3 @@
-# origo-terrestrial-sw/src/origo_terrestrial_sw/service.py
 """Implements OrigoTerrestrialService (proto/origo/v1/origo.proto) — the exact
 interface origo-station-agent's GrpcOrigoTerrestrial already calls. Design §5.2 steps
 4-5 as running code: verify Origo Space's signature on ek, check nonce freshness,

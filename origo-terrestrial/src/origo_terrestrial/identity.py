@@ -12,7 +12,6 @@ from pathlib import Path
 
 from origo_crypto.engine import CryptoEngine
 
-
 class IdentityStore:
     def __init__(self, *, path: Path, engine: CryptoEngine) -> None:
         self._path = path
