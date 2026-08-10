@@ -13,13 +13,13 @@ call, made by origo_info_adapter.dockerlink.DockerLink on origo-station-agent's
 behalf.
 
 Endpoints:
-  GET  /health          liveness probe (docker HEALTHCHECK, and the provisioner's
-                         wait-until-ready poll)
-  GET  /identity         this device's own public key — provisioning-time only
-  POST /peer              store the paired Origo Terrestrial's public key — the
-                         provisioner calls this once, after both containers exist
-  POST /downlink/trigger  §5.2 steps 3-4: KeyGen + sign ek, "transmit" it
-  POST /uplink             §5.2 step 7: verify + Decapsulate the returned ct
+  GET  /health              liveness probe (docker HEALTHCHECK, and the provisioner's
+                            wait-until-ready poll)
+  GET  /identity            this device's own public key — provisioning-time only
+  POST /peer                store the paired Origo Terrestrial's public key — the
+                            provisioner calls this once, after both containers exist
+  POST /downlink/trigger    §5.2 steps 3-4: KeyGen + sign ek, "transmit" it
+  POST /uplink              §5.2 step 7: verify + Decapsulate the returned ct
 """
 
 from __future__ import annotations

@@ -73,7 +73,18 @@ def require_edge_token(request: Request) -> None:
 
     Requires the reverse proxy/ASGI server terminating TLS to forward the
     verified client cert's CN.
+
+    Dev bypass: with no TLS-terminating proxy in front of a plain `uv run uvicorn`
+    process, X-Client-CN never arrives from anywhere — settings.auth_disabled is
+    what .env.example's own comment already promises lets local/Docker-loop traffic
+    through. This was previously unchecked here, so ORIGO_AUTH_DISABLED had no
+    actual effect on this router; every /v1/edge/* call 401'd unconditionally.
     """
+    settings: Settings = request.app.state.settings
+    if settings.auth_disabled:
+        request.state.device_cn = "dev-auth-disabled"
+        return
+
     cn = request.headers.get("X-Client-CN")
 
     if not cn:
