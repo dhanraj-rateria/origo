@@ -22,6 +22,8 @@ dependencies = [
   "skyfield>=1.49",                  # AOS/LOS geometry
   "prometheus-client>=0.20",
   "orjson>=3.10",
+  "docker>=7.1",                     # Docker device-loop provisioning (local dev only)
+  "httpx>=0.27",                     # provisioning-time calls to device containers
 ]
 
 [project.optional-dependencies]

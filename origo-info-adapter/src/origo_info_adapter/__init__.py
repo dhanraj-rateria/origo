@@ -37,10 +37,22 @@ __all__ = [  # noqa: RUF022 — grouped by concept, not alphabetised
 def build_adapter() -> GroundNetworkAdapter:
     """Factory driven entirely by environment.
 
-    Imports are local so the fake path never needs grpc or a protobuf runtime — which
-    is what makes the frontend and CI runnable on a machine with no credentials and no
+    Imports are local so neither the fake path nor the Docker-link path ever needs
+    grpc or a protobuf runtime — which is what makes the frontend, CI, and the Docker
+    device loop all runnable on a machine with no StellarStation credentials and no
     generated stubs.
     """
+    import os
+
+    docker_link_url = os.environ.get("ORIGO_RF_LINK_URL")
+    if docker_link_url:
+        # The Docker device loop's mock RF/StellarStation hop — see dockerlink/adapter.py.
+        # Checked first and unconditionally: a station-agent container provisioned for
+        # the device loop has no StellarStation credentials to validate below.
+        from .dockerlink.adapter import DockerLinkAdapter
+
+        return DockerLinkAdapter(base_url=docker_link_url)
+
     from .stellarstation.config import StellarStationSettings
 
     settings = StellarStationSettings()      # validates; raises AdapterConfigError

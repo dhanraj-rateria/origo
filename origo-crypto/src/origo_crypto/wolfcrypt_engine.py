@@ -53,7 +53,7 @@ ML_DSA_87_SIGNATURE_BYTES = 4627
 # Digest identifier used by wc_HKDF()/wc_HmacSetKey(): this is the legacy
 # hmac.h enum (MD5=0, SHA=1, SHA256=2, ...), NOT hash.h's WC_HASH_TYPE_*
 # enum, which numbers SHA-256 differently. wc_HKDF() takes the hmac.h one.
-WC_SHA256 = 2
+WC_SHA256 = 6
 
 # AES-256-GCM
 AES_GCM_TAG_BYTES = 16

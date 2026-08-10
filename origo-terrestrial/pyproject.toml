@@ -1,9 +1,20 @@
 [project]
 name = "origo-terrestrial"
 version = "0.1.0"
-description = "Origo Terrestrial Module"
+description = "Origo Terrestrial Module — software stand-in for ground PQC HSM firmware"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "origo-crypto",
+  "grpcio>=1.66",
+  "structlog>=24.4",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+  "grpcio-tools>=1.66",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

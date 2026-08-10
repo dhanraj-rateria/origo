@@ -11,8 +11,11 @@ install:            ## sync all deps (python + node)
 proto:              ## regenerate StellarStation stubs from vendored .proto
 	$(PY) python origo-info-adapter/scripts/gen_proto.py
 
-proto-origo:        ## regenerate Origo Terrestrial stubs
+proto-origo:        ## regenerate Origo Terrestrial *client*-side stubs (station-agent)
 	$(PY) python origo-station-agent/scripts/gen_proto.py
+
+proto-terrestrial:  ## regenerate Origo Terrestrial *server*-side stubs
+	$(PY) python origo-terrestrial/scripts/gen_proto.py
 
 lint:               ## ruff + mypy + eslint
 	$(PY) ruff format --check .
@@ -46,6 +49,12 @@ contracts:          ## CI gate: schema must match committed artifact
 
 up:                 ## local infra
 	docker compose up -d
+
+images:             ## build origo-space/origo-terrestrial/origo-station-agent container images
+	docker build -f origo-space/Dockerfile        -t origo-space:latest        .
+	docker build -f origo-terrestrial/Dockerfile  -t origo-terrestrial:latest  .
+	docker build -f origo-station-agent/Dockerfile -t origo-station-agent:latest .
+
 dev-edge:
 	cd origo-edge && $(PY) uvicorn origo_edge.main:app --reload --port 8000
 dev-worker:

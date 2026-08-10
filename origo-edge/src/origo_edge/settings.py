@@ -44,6 +44,19 @@ class Settings(BaseSettings):
 
     edge_device_token: str = "dev-only-change-me"
 
+    # --- Docker device-loop provisioning (local dev / demo only; see
+    # docs/docker-device-loop.md) — off by default so a plain `make dev-edge` with no
+    # Docker daemon reachable behaves exactly as it always has. ------------------
+    device_provisioning_enabled: bool = False
+    docker_network: str = "origo-net"
+    space_image: str = "origo-space:latest"
+    terrestrial_image: str = "origo-terrestrial:latest"
+    station_agent_image: str = "origo-station-agent:latest"
+    # How a container reaches this host-run origo-edge process. host.docker.internal
+    # resolves on Docker Desktop automatically and on Linux via the extra_hosts entry
+    # DeviceProvisioner adds to every container it starts (Docker >= 20.10).
+    edge_public_url: str = "http://host.docker.internal:8000"
+
     @model_validator(mode="after")
     def _guard_production(self) -> Self:
         if self.env == "prod":
@@ -55,6 +68,8 @@ class Settings(BaseSettings):
                 raise ValueError("signing_key_uri is required in prod")
             if self.debug or self.db_echo:
                 raise ValueError("debug/db_echo must be false in prod")
+            if self.device_provisioning_enabled:
+                raise ValueError("device_provisioning_enabled is a local-dev feature and must be false in prod")
         return self
 
 

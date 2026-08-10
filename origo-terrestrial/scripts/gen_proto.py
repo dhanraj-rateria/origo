@@ -1,5 +1,17 @@
-# origo-station-agent/scripts/gen_proto.py
-"""Generate gRPC stubs from proto/origo/v1/origo.proto. Run via `make proto-origo`."""
+# origo-terrestrial/scripts/gen_proto.py
+"""Generate gRPC stubs from proto/origo/v1/origo.proto.
+
+Same .proto contract as origo-station-agent/proto/origo/v1/origo.proto, duplicated on
+purpose — origo-station-agent generates the *client* stub from its copy, this
+generates the *server* stub (OrigoTerrestrialServiceServicer, which service.py
+subclasses) from this one. Same rationale as origo_crypto/envelope.py's wire-format
+duplication: the two sides shouldn't depend on each other's package, so the contract
+is specified independently in both places. If either .proto changes, both must change
+together.
+
+Run via `python scripts/gen_proto.py` (no Makefile target yet — add one alongside
+`proto-origo` if this starts getting run often enough to be worth it).
+"""
 
 from __future__ import annotations
 
@@ -13,7 +25,7 @@ _ABS_IMPORT_RE = re.compile(r"^from [\w.]+ import (\w+_pb2) as ", re.MULTILINE)
 
 ROOT = Path(__file__).resolve().parent.parent
 PROTO_DIR = ROOT / "proto"
-OUT_DIR = ROOT / "src" / "origo_station_agent" / "_proto"
+OUT_DIR = ROOT / "src" / "origo_terrestrial" / "_proto"
 
 def _fix_relative_imports(out_dir: Path) -> None:
     """protoc's Python gRPC plugin emits an *absolute* import for the sibling pb2

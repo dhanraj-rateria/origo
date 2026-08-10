@@ -1214,7 +1214,9 @@ dependencies = [
     { name = "alembic" },
     { name = "arq" },
     { name = "asyncpg" },
+    { name = "docker" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "orjson" },
     { name = "prometheus-client" },
     { name = "pydantic" },
@@ -1245,7 +1247,9 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
     { name = "arq", specifier = ">=0.26" },
     { name = "asyncpg", specifier = ">=0.29" },
+    { name = "docker", specifier = ">=7.1" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "orjson", specifier = ">=3.10" },
@@ -1275,6 +1279,7 @@ source = { editable = "origo-info-adapter" }
 dependencies = [
     { name = "google-auth" },
     { name = "grpcio" },
+    { name = "httpx" },
     { name = "protobuf" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1296,6 +1301,7 @@ requires-dist = [
     { name = "google-auth", specifier = ">=2.34" },
     { name = "grpcio", specifier = ">=1.66" },
     { name = "grpcio-tools", marker = "extra == 'dev'", specifier = ">=1.66" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "protobuf", specifier = ">=5.27" },
     { name = "pydantic", specifier = ">=2.8" },
@@ -1312,6 +1318,18 @@ provides-extras = ["dev"]
 name = "origo-space"
 version = "0.1.0"
 source = { editable = "origo-space" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "origo-crypto" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "origo-crypto", editable = "origo-crypto" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+]
 
 [[package]]
 name = "origo-station-agent"
@@ -1359,6 +1377,29 @@ provides-extras = ["dev"]
 name = "origo-terrestrial"
 version = "0.1.0"
 source = { editable = "origo-terrestrial" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "grpcio" },
+    { name = "origo-crypto" },
+    { name = "structlog" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "grpcio-tools" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "grpcio", specifier = ">=1.66" },
+    { name = "grpcio-tools", marker = "extra == 'dev'", specifier = ">=1.66" },
+    { name = "origo-crypto", editable = "origo-crypto" },
+    { name = "structlog", specifier = ">=24.4" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "orjson"

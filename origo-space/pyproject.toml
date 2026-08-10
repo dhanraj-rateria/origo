@@ -1,9 +1,13 @@
 [project]
 name = "origo-space"
 version = "0.1.0"
-description = "Origo Space Module"
+description = "Origo Space Module — software stand-in for satellite PQC firmware"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "origo-crypto",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

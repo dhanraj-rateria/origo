@@ -12,6 +12,7 @@ from ..repositories.job import JobRepository
 from ..repositories.key import KeyRepository
 from ..repositories.pass_repository import PassRepository
 from ..repositories.telemetry import TelemetryRepository
+from ..services.device_provisioner import DeviceProvisioner
 from ..services.job_service import JobService
 from ..services.key_service import KeyService
 from ..settings import Settings
@@ -58,6 +59,13 @@ def get_job_service(
     key_service: Annotated[KeyService, Depends(get_key_service)],
 ) -> JobService:
     return JobService(session=session, jobs=jobs, keys=key_service)
+
+
+def get_device_provisioner(request: Request) -> DeviceProvisioner:
+    """Built once in main.py's create_app and held on app.state — a Docker client
+    and an httpx.Client both want to live for the process's lifetime, not be
+    reconstructed per request the way DeviceRepository etc. are."""
+    return request.app.state.device_provisioner
 
 
 def require_edge_token(request: Request) -> None:

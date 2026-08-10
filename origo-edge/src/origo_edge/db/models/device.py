@@ -20,4 +20,9 @@ class Device(Base, UUIDPrimaryKey, Timestamps):
     )
     mission: Mapped[str | None] = mapped_column(String(128))
     serial_number: Mapped[str | None] = mapped_column(String(128))
+    # Which device (by serial_number) this one exchanges keys with. Optional and only
+    # meaningful today for the Docker device-loop provisioner (an Origo Terrestrial
+    # device needs to know its paired Origo Space device's serial number before its
+    # container can be started) — not a general fleet-topology model.
+    peer_serial_number: Mapped[str | None] = mapped_column(String(128))
     last_contact_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

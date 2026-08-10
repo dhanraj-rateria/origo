@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models.telemetry_record import TelemetryRecord
+from ..db.models.telemetry import TelemetryRecord
 
 
 class TelemetryRepository:

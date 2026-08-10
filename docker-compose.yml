@@ -19,3 +19,8 @@ services:
 
 volumes:
   origo_pg_data:
+
+networks:
+  origo-net:
+    name: origo-net
+    driver: bridge

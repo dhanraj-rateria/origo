@@ -4,7 +4,7 @@
 
 Cryptographic custody and real-time execution live inside a trust boundary —
 **Origo Space** (satellite) and **Origo Terrestrial** (ground). Orchestration,
-scheduling, fleet visibility, and policy live in **origo-edge**. A full compromise of
+scheduling, fleet visibility live in **origo-edge**. A full compromise of
 origo-edge should yield operational visibility and disruption capability at worst —
 never plaintext key material, never forgery capability.
 
@@ -79,7 +79,7 @@ Terrestrial share one physical enclosure at each ground station.
 1. **origo-edge → (poll) → origo-station-agent**: a signed rekey job, picked up on
    the agent's own schedule.
 2. **origo-station-agent → (local link) → Origo Terrestrial → OBC → Origo Space**: the
-   job is delivered and stored. Origo Space triggers KeyGen the next time its policy's condition is met during an actual pass.
+   job is delivered and stored. Origo Space triggers KeyGen the next time the condition is met during an actual pass.
 3. **Origo Space**: QRNG → `KeyGen()` → (`ek`, `dk`). Signs `ek` (+ nonce, device id)
    with its ML-DSA identity key.
 4. **Origo Space → OBC → RF Transponder → (S-band downlink) → StellarStation →
@@ -94,8 +94,7 @@ Terrestrial share one physical enclosure at each ground station.
    origo-station-agent** (local, status): key id, timestamp, health — never the key
    itself. **origo-station-agent → (push) → origo-edge**: synced once the pass ends,
    not live.
-9. **origo-edge**: `Key.state` → `ACTIVE`, `Job.state` → `ACTIVE`. Updates the stored
-   policy if the next rekey trigger changed.
+9. **origo-edge**: `Key.state` → `ACTIVE`, `Job.state` → `ACTIVE`. Updates if the next rekey trigger changed.
 
 **Why authentication is mandatory, not optional:** a bare KEM exchange only guarantees
 confidentiality if `ek` is genuinely from Origo Space — an unauthenticated exchange is
@@ -184,6 +183,6 @@ apply inside whichever of B/C is chosen rather than a competing option.
 - Decrypted data-delivery results live in `Job.parameters` as an interim measure — a
   dedicated results table or object-store reference is the real answer past
   KB-to-low-MB payload sizes.
-- `Pass`, `Telemetry` (health, not data-delivery results), `ConfigPolicy`, `Alert`, and
+- `Pass`, `Telemetry` (health, not data-delivery results), `Alert`, and
   `AuditEvent` are still `origo-edge`'s hardcoded fixture responses — `Device`/`Key`/
   `Job` are the only fully DB-backed entities so far. Same pattern, not yet repeated.

@@ -1,3 +1,13 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, Enum, String, BigInteger, LargeBinary, ForeignKey, func
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
+from ..base import Base, Timestamps, UUIDPrimaryKey
+
 class AuditEvent(Base, UUIDPrimaryKey):
     __tablename__ = "audit_events"
     sequence: Mapped[int] = mapped_column(BigInteger, autoincrement=True, unique=True)

@@ -18,6 +18,7 @@ from .api.v1.passes import router as passes_router
 from .api.v1.telemetry import router as telemetry_router
 from .api.v1.platform import router as platform_router
 from .db.session import build_engine, build_sessionmaker
+from .services.device_provisioner import DeviceProvisioner
 from .settings import Settings, get_settings
 
 log = structlog.get_logger(__name__)
@@ -29,7 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = build_engine(settings)
     app.state.engine = engine
     app.state.sessionmaker = build_sessionmaker(engine)
-    log.info("edge.started", env=settings.env)
+    log.info("edge.started", env=settings.env, device_provisioning=settings.device_provisioning_enabled)
     try:
         yield
     finally:
@@ -47,6 +48,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         generate_unique_id_function=lambda route: f"{'_'.join(route.tags) if route.tags else 'route'}_{route.name}",
     )
     app.state.settings = settings
+    # A Docker client and an httpx.Client both want to live for the process's
+    # lifetime — same reasoning as engine/sessionmaker above, just built eagerly
+    # here instead of in the lifespan hook since it opens no I/O of its own until a
+    # device is actually provisioned.
+    app.state.device_provisioner = DeviceProvisioner(settings)
 
     app.add_middleware(RequestContextMiddleware)
     if settings.cors_origins:

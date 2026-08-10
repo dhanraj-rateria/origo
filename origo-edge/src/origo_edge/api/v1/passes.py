@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ...repositories.pass_ import PassRepository
+from ...repositories.pass_repository import PassRepository
 from ..deps import get_pass_repo
 
 
