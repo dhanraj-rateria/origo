@@ -20,7 +20,7 @@ from origo_info_adapter import ContactId, SatelliteRef, build_adapter
 
 from .events import results_to_events
 from .origo.grpc_client import GrpcOrigoTerrestrial
-from .pass_executor import PassExecutor
+from .pass_executor import PassExecutor, StepResult
 from .settings import StationAgentSettings
 from .sync_client import SyncClient
 
@@ -61,9 +61,29 @@ async def run() -> None:
                 if now < plan.valid_from:
                     continue   # not yet time — picked up on a later loop iteration
 
-                results = await executor.run(
-                    plan=plan, contact_id=ContactId(str(plan.pass_id)), now=now,
-                )
+                try:
+                    results = await executor.run(
+                        plan=plan, contact_id=ContactId(str(plan.pass_id)), now=now,
+                    )
+                except Exception:  # noqa: BLE001
+                    # Previously unguarded: a single failed step (a stream timeout,
+                    # a rejected signature, anything raising out of executor.run())
+                    # killed this entire process — Docker's restart policy then
+                    # relaunched it, which looked like "retrying every ~30s" but was
+                    # actually a full crash-and-restart cycle every attempt, discarding
+                    # in-memory state (the poll loop's own `executed` set included) each
+                    # time. One failed pass should cost one failed pass, not the whole
+                    # process — same reasoning already applied to push_status below,
+                    # just never extended to cover this call too.
+                    log.exception("pass.crashed", plan_id=str(plan.plan_id))
+                    results = [
+                        StepResult(
+                            step_id=step.step_id, job_id=step.job_id, outcome="FAILED",
+                            detail={"reason": "pass_executor.run() raised — see pass.crashed log"},
+                        )
+                        for step in plan.steps
+                    ]
+
                 try:
                     await sync.push_status(events=results_to_events(plan, results))
                 except Exception:  # noqa: BLE001

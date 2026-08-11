@@ -115,6 +115,7 @@ def set_peer(body: PeerKey) -> dict[str, str]:
 def trigger_downlink() -> dict[str, str]:
     """What a real RF chain would transmit during a pass — see design §5.2 step 4."""
     envelope = _agent.initiate_key_exchange()
+    print(f"[trigger] agent={id(_agent)} pending={id(_agent._pending)} device_id={DEVICE_ID}", flush=True)
     return {"device_id": DEVICE_ID, "envelope_hex": envelope.hex()}
 
 
@@ -122,16 +123,20 @@ def trigger_downlink() -> dict[str, str]:
 def receive_uplink(body: UplinkEnvelope) -> dict[str, object]:
     """What a real RF chain would have received during a pass — design §5.2 step 7."""
     global _traffic_key
+    print(f"[uplink] agent={id(_agent)} pending={id(_agent._pending)} peer_key_set={_peer_public_key is not None}", flush=True)
     if _peer_public_key is None:
         raise HTTPException(409, "no peer public key set — call POST /peer first")
     try:
         envelope = bytes.fromhex(body.envelope_hex)
     except ValueError as exc:
         raise HTTPException(400, "envelope_hex is not valid hex") from exc
+    print(f"[uplink] calling process_ct_envelope, envelope={len(envelope)} bytes", flush=True)
     try:
         traffic_key = _agent.process_ct_envelope(envelope, peer_public_key=_peer_public_key)
     except (RuntimeError, ValueError) as exc:
+        print(f"[uplink] process_ct_envelope raised: {exc!r}", flush=True)
         raise HTTPException(400, str(exc)) from exc
+    print("[uplink] process_ct_envelope returned", flush=True)
     _traffic_key = traffic_key   # now available to /downlink/data
     # The traffic key itself never leaves this process (KemKeypair.dk's own docstring
     # rule, applied here too) — a short fingerprint is enough to confirm both sides

@@ -48,6 +48,7 @@ from pydantic import BaseModel
 
 from origo_info_adapter._proto.stellarstation.api.v1 import stellarstation_pb2 as ss
 from origo_info_adapter._proto.stellarstation.api.v1 import stellarstation_pb2_grpc as ss_grpc
+from origo_info_adapter._proto.stellarstation.api.v1 import transport_pb2 as tp
 
 log = structlog.get_logger(__name__)
 
@@ -133,12 +134,16 @@ class StellarStationMockServicer(ss_grpc.StellarStationServiceServicer):
         plan_id = setup.plan_id
         ground_station_id = setup.ground_station_id
 
-        log.info("mock.stream_opened", satellite_id=satellite_id, stream_id=stream_id, space_url=space_url)
+        log.info(
+            "mock.stream_opened", satellite_id=satellite_id, stream_id=stream_id,
+            space_url=space_url, enable_flow_control=enable_flow_control,
+        )
 
         async def send_telemetry(data: bytes) -> None:
+            log.info("mock.send_telemetry.start", bytes=len(data))
             ack_id = f"ack-{uuid.uuid4().hex[:12]}"
-            telemetry = ss.Telemetry(
-                framing=ss.Framing.BITSTREAM, data=data,
+            telemetry = tp.Telemetry(
+                framing=tp.Framing.BITSTREAM, data=data,
                 time_first_byte_received=_now_ts(), time_last_byte_received=_now_ts(),
             )
             await context.write(ss.SatelliteStreamResponse(
@@ -149,6 +154,7 @@ class StellarStationMockServicer(ss_grpc.StellarStationServiceServicer):
                     message_ack_id=ack_id if enable_flow_control else "",
                 ),
             ))
+            log.info("mock.send_telemetry.done", bytes=len(data))
 
         async def relay_downlink() -> None:
             """One-shot: this mock represents "the satellite is reachable right
@@ -159,6 +165,7 @@ class StellarStationMockServicer(ss_grpc.StellarStationServiceServicer):
             see that module's own docstring for the documented limitation this
             heuristic carries (can't run a fresh key exchange during a pass where
             data happens to be staged)."""
+            log.info("mock.relay_downlink.start", satellite_id=satellite_id)
             try:
                 status_resp = await _http.get(f"{space_url}/downlink/data/status")
                 status_resp.raise_for_status()
@@ -166,6 +173,7 @@ class StellarStationMockServicer(ss_grpc.StellarStationServiceServicer):
             except httpx.HTTPError as exc:
                 log.warning("mock.status_check_failed", error=str(exc))
                 chunks_queued = 0
+            log.info("mock.relay_downlink.status_checked", chunks_queued=chunks_queued)
 
             if chunks_queued > 0:
                 while True:
@@ -184,20 +192,25 @@ class StellarStationMockServicer(ss_grpc.StellarStationServiceServicer):
                     await send_telemetry(bytes.fromhex(resp.json()["ciphertext_hex"]))
                 return
 
+            log.info("mock.relay_downlink.triggering")
             try:
                 resp = await _http.post(f"{space_url}/downlink/trigger")
                 resp.raise_for_status()
             except httpx.HTTPError as exc:
                 log.warning("mock.downlink_failed", error=str(exc))
                 return
+            log.info("mock.relay_downlink.triggered")
             await send_telemetry(bytes.fromhex(resp.json()["envelope_hex"]))
+            log.info("mock.relay_downlink.done")
 
         async def relay_uplink_loop() -> None:
             """Runs until the client cancels the call (PassExecutor's `async with
             ... as link:` block exiting) — this is what keeps the RPC handler alive
             for the stream's whole lifetime, not relay_downlink() (which finishes
             after its one telemetry push)."""
+            log.info("mock.relay_uplink_loop.start", satellite_id=satellite_id)
             async for request in request_iterator:
+                log.info("mock.relay_uplink_loop.request", kind=request.WhichOneof("Request"))
                 if request.WhichOneof("Request") == "send_satellite_commands_request":
                     commands = list(request.send_satellite_commands_request.command)
                     if commands:
@@ -214,17 +227,34 @@ class StellarStationMockServicer(ss_grpc.StellarStationServiceServicer):
                             continue
                     await context.write(ss.SatelliteStreamResponse(
                         stream_id=stream_id,
-                        stream_event=ss.StreamEvent(
+                        stream_event=tp.StreamEvent(
                             request_id=request.request_id, timestamp=_now_ts(),
-                            command_sent=ss.StreamEvent.CommandSentFromGroundStation(),
+                            command_sent=tp.StreamEvent.CommandSentFromGroundStation(),
                         ),
                     ))
                 # telemetry_received_ack / ground_station_configuration_request:
                 # no-op — nothing here maintains a real retransmission buffer or
                 # radio state to update.
 
-        downlink_task = asyncio.ensure_future(relay_downlink())
-        uplink_task = asyncio.ensure_future(relay_uplink_loop())
+        log.info("mock.spawning_tasks", satellite_id=satellite_id)
+
+        async def guarded(coro, label: str) -> None:
+            """asyncio.wait() doesn't propagate task exceptions — without this, a
+            bug anywhere in relay_downlink()/relay_uplink_loop() that isn't an
+            httpx.HTTPError (a malformed-hex ValueError, a protobuf construction
+            TypeError, anything not already caught) would die completely silently:
+            no log line, no traceback, the stream just sits open until unrelated
+            ping-flood protection eventually kills it — indistinguishable from the
+            hang this whole round of changes is trying to diagnose. This makes that
+            failure mode loud instead of silent, whatever it turns out to be."""
+            try:
+                await coro
+            except Exception:
+                log.exception(f"mock.{label}.crashed", satellite_id=satellite_id)
+                raise
+
+        downlink_task = asyncio.create_task(guarded(relay_downlink(), "relay_downlink"))
+        uplink_task = asyncio.create_task(guarded(relay_uplink_loop(), "relay_uplink_loop"))
         try:
             await asyncio.wait([downlink_task, uplink_task], return_when=asyncio.ALL_COMPLETED)
         finally:

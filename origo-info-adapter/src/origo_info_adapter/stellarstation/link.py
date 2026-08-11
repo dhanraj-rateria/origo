@@ -62,6 +62,9 @@ class StellarStationLink:
         self._acks: dict[str, asyncio.Future[CommandAck]] = {}
         self._closed = False
 
+        self._incoming: asyncio.Queue[object] = asyncio.Queue()
+        self._reader_task: asyncio.Task[None] | None = None
+
     # ---------------------------------------------------------------- properties
 
     @property
@@ -77,6 +80,11 @@ class StellarStationLink:
     async def __aenter__(self) -> StellarStationLink:
         self._call = self._stub.OpenSatelliteStream(self._requests())
         await self._outbound.put(self._setup_request())
+
+        # Start consuming the gRPC response stream immediately.
+        # This task owns all reads from self._call for the lifetime of the link.
+        self._reader_task = asyncio.create_task(self._read_loop())
+
         log.info(
             "link.opened",
             satellite_ref=self._satellite_ref,
@@ -96,14 +104,25 @@ class StellarStationLink:
     async def close(self) -> None:
         if self._closed:
             return
+
         self._closed = True
+
         await self._outbound.put(_SENTINEL)
+
+        if self._reader_task is not None:
+            self._reader_task.cancel()
+
         if self._call is not None:
             self._call.cancel()
+
         for fut in self._acks.values():
             if not fut.done():
-                fut.set_exception(StreamClosed("link closed before command ack"))
+                fut.set_exception(
+                    StreamClosed("link closed before command ack")
+                )
+
         self._acks.clear()
+
         log.info(
             "link.closed",
             satellite_ref=self._satellite_ref,
@@ -138,15 +157,18 @@ class StellarStationLink:
 
     # ---------------------------------------------------------------- downlink
 
-    async def frames(self) -> AsyncIterator[DownlinkFrame]:
-        """Yield downlink frames until LOS or close, acking as we go.
+    # ---------------------------------------------------------------- read loop
 
-        Per design §5.2 step 4 this is where the signed `ek` arrives. We hand up raw
-        bytes: reassembly and signature verification belong to the Edge Agent and the
-        Ground HSM (§3.3.1, §3.4), never to the transport.
+    async def _read_loop(self) -> None:
+        """Continuously consume the gRPC response stream for the lifetime
+        of this link.
+
+        This must be independent of frames(). In particular, send_commands()
+        may be waiting for a command_sent stream event after the caller has
+        stopped consuming frames().
         """
         if self._call is None:
-            raise StreamClosed("frames() before __aenter__")
+            return
 
         try:
             async for response in self._call:
@@ -154,26 +176,68 @@ class StellarStationLink:
                     self._stream_id = response.stream_id
 
                 kind = response.WhichOneof("Response")
+
                 if kind == "receive_telemetry_response":
                     tlm = response.receive_telemetry_response
+
                     for pb in tlm.telemetry:
-                        yield m.to_frame(pb)
+                        await self._incoming.put(m.to_frame(pb))
+
                     if tlm.message_ack_id:
                         await self._ack(tlm.message_ack_id)
+
                 elif kind == "stream_event":
+                    # This is deliberately handled here, rather than in
+                    # frames(), because frames() may no longer be running.
                     self._handle_event(response.stream_event)
+
         except grpc.aio.AioRpcError as exc:
+            if self._closed:
+                return
+
             recoverable = exc.code() in {
                 grpc.StatusCode.UNAVAILABLE,
                 grpc.StatusCode.DEADLINE_EXCEEDED,
                 grpc.StatusCode.INTERNAL,
             }
-            raise StreamClosed(
-                f"satellite stream ended: {exc.details() or exc.code().name}",
-                recoverable=recoverable and self._last_ack_id is not None,
-                provider="STELLARSTATION",
-                cause=exc,
-            ) from exc
+
+            await self._incoming.put(
+                StreamClosed(
+                    f"satellite stream ended: {exc.details() or exc.code().name}",
+                    recoverable=recoverable and self._last_ack_id is not None,
+                    provider="STELLARSTATION",
+                    cause=exc,
+                )
+            )
+            return
+
+        except asyncio.CancelledError:
+            return
+
+        # Normal stream termination.
+        await self._incoming.put(_SENTINEL)
+
+
+    async def frames(self) -> AsyncIterator[DownlinkFrame]:
+        """Yield downlink frames from the background reader.
+
+        frames() is only a consumer of _incoming. It does not read the gRPC
+        stream itself. Therefore callers can stop consuming frames() without
+        stopping processing of stream events or command acknowledgements.
+        """
+        if self._call is None:
+            raise StreamClosed("frames() before __aenter__")
+
+        while True:
+            item = await self._incoming.get()
+
+            if item is _SENTINEL:
+                return
+
+            if isinstance(item, StreamClosed):
+                raise item
+
+            yield item
 
     async def _ack(self, message_ack_id: str) -> None:
         if not self._settings.enable_flow_control:
