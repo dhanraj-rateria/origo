@@ -9,16 +9,13 @@ from pydantic import BaseModel
 from ...repositories.alert import AlertRepository
 from ..deps import get_alert_repo
 
-
 router = APIRouter(prefix="/v1", tags=["alerts"])
-
 
 class AlertCreate(BaseModel):
     device_id: uuid.UUID
     severity: str
     condition: str
     state: str = "OPEN"
-
 
 @router.get("/alerts")
 async def list_alerts(
@@ -43,7 +40,6 @@ async def list_alerts(
         )
     ]
 
-
 @router.get("/alerts/{alert_id}")
 async def get_alert(
     alert_id: uuid.UUID,
@@ -62,7 +58,6 @@ async def get_alert(
         "state": alert.state,
         "created_at": alert.created_at.isoformat(),
     }
-
 
 @router.post("/alerts", status_code=201)
 async def create_alert(

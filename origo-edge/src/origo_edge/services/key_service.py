@@ -68,3 +68,20 @@ class KeyService:
             key.retired_at = now
 
         return key
+
+
+    async def get_active_for_pair(self, *, satellite_device_id: uuid.UUID, ground_device_id: uuid.UUID) -> list[Key]:
+        """The pair's currently-ACTIVE key(s) — the DB partial unique index guarantees
+        at most one, so callers can safely take [0] if the list is non-empty. Used by
+        JobService.create_data_delivery to attach the right key to a DATA_DELIVERY job
+        without the caller ever needing to know an internal key identifier.
+
+        exclude_id=None here (vs. advance()'s exclude_id=key.id usage) is an assumption
+        that list_active_for_pair's exclude_id param defaults to/accepts None meaning
+        "exclude nothing" — I haven't seen repositories/key.py to confirm that's how
+        it's implemented. Paste that file if this raises a TypeError or behaves
+        unexpectedly."""
+        return await self._keys.list_active_for_pair(
+            satellite_device_id=satellite_device_id, ground_device_id=ground_device_id, exclude_id=None,
+        )    
+    

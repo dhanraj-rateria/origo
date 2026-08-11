@@ -21,8 +21,16 @@ class Device(Base, UUIDPrimaryKey, Timestamps):
     mission: Mapped[str | None] = mapped_column(String(128))
     serial_number: Mapped[str | None] = mapped_column(String(128))
     # Which device (by serial_number) this one exchanges keys with. Optional and only
-    # meaningful today for the Docker device-loop provisioner (an Origo Terrestrial
-    # device needs to know its paired Origo Space device's serial number before its
-    # container can be started) — not a general fleet-topology model.
+    # meaningful today for the Docker device-loop provisioner — not a general
+    # fleet-topology model.
     peer_serial_number: Mapped[str | None] = mapped_column(String(128))
+    # Outcome of the Docker device-loop provisioner's last attempt for this device:
+    # "running" / "provisioning_failed" / "not_provisioned", or NULL if provisioning
+    # was never attempted (real devices, or ORIGO_DEVICE_PROVISIONING_ENABLED=false).
+    # Deliberately named around "provisioning," not "container" — a real device
+    # simply never gets this field populated rather than needing it repurposed once
+    # real hardware exists. Not a substitute for real connectivity/health telemetry,
+    # which doesn't exist yet (see origo-edge's "known gaps": Telemetry is still a
+    # fixture).
+    provisioning_status: Mapped[str | None] = mapped_column(String(32))
     last_contact_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

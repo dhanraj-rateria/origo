@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
+import base64
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel

@@ -79,18 +79,6 @@ docker logs -f origo-space-sn-001           # nothing printed on success today �
 
 ## Open items
 
-- **wolfSSL build**: `origo-space`/`origo-terrestrial`'s Dockerfiles vendor your
-  already-validated `/usr/local` wolfSSL build rather than re-deriving `./configure`
-  flags — I don't have a network in the environment I used to write this to actually
-  compile and confirm flags, so the commented from-source alternative in each
-  Dockerfile is unverified. Same caution as the Aes/WC_RNG struct-size note in
-  `wolfcrypt_engine.py`'s review: treat it as a starting point, not a given.
-- **Identity persistence**: each device container's identity keypair lives on a
-  named volume (`origo-identity-<container>`), so it survives a container restart —
-  but re-registering the *same serial number* replaces the container and gets a
-  fresh volume name tied to the new container, i.e. a fresh identity. Not an issue
-  for a first pass through the demo; would need the volume name keyed on serial
-  number alone (not container name) to survive re-registration.
 - **DATA_DELIVERY / CONFIG_PUSH**: `DockerLinkAdapter` only implements the
   KEY_EXCHANGE hop (single ek frame, single ct uplink). `InMemoryAdapter` remains the
   adapter for exercising the other job types in tests.

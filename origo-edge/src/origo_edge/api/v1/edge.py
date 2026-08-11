@@ -77,6 +77,32 @@ async def push_status(
 
         if job.type is JobType.KEY_EXCHANGE and job.key_id:
             if outcome == "ACTIVE":
-                await keys.advance(key_id=job.key_id, target=KeyState.ACTIVE, hsm_key_reference=detail.get("key_id"))
-            elif outcome in {"FAILED", "TIMED_OUT"}:
+                # Design §4's handshake reaches origo-edge as exactly one ground-side
+                # event at pass end — there's no separate signal for "ek sent" or "ct
+                # received" as their own moments, so walk KEY_MACHINE through every
+                # intermediate hop here rather than widening it to allow a direct
+                # PENDING_KEYGEN -> ACTIVE jump (that jump is what produced the
+                # ILLEGAL_STATE_TRANSITION 409 this replaces). hsm_key_reference is
+                # only actually written on the final ACTIVE hop — see
+                # KeyService.advance's own `if target is KeyState.ACTIVE:` gate — so
+                # passing it on all four calls is harmless.
+                for target in (KeyState.EK_SENT, KeyState.AWAITING_CT, KeyState.DECAPS_COMPLETE, KeyState.ACTIVE):
+                    await keys.advance(key_id=job.key_id, target=target, hsm_key_reference=detail.get("key_id"))
+            elif outcome == "FAILED":
                 job.failure_reason = detail.get("reason")
+                # A rejected signature (or any other definite FAILED cause) doesn't
+                # improve on retry with the same key — and KeyService.create_pending's
+                # in-flight guard blocks a *new* key exchange for this device pair for
+                # as long as this one sits in PENDING_KEYGEN. Revoke it so the pair
+                # isn't stuck forever. advance() never checks requires_dual_control —
+                # confirmed nothing in its body references it — so this
+                # system-initiated revoke needs nothing extra.
+                await keys.advance(key_id=job.key_id, target=KeyState.REVOKED)
+            elif outcome == "TIMED_OUT":
+                job.failure_reason = detail.get("reason")
+                # Deliberately NOT revoked: a pass ending before the ek arrived
+                # doesn't mean the key is bad, just that this pass didn't carry it —
+                # leave it PENDING_KEYGEN so a later pass can retry the same key
+                # exchange. Revisit if TIMED_OUT should behave like FAILED instead;
+                # I don't have visibility into whatever retry-scheduling logic
+                # decides when a PENDING_KEYGEN key gets tried again.

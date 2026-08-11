@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from ...domain.enums import DeviceStatus, DeviceType
 from ...repositories.device import DeviceRepository
@@ -51,10 +52,19 @@ async def register_device(
     # Best-effort local-dev container provisioning (see DeviceProvisioner's own
     # docstring) — never lets a Docker/provisioning problem fail the registration
     # itself; the device row stands regardless, same as it always has.
+    #
+    # run_in_threadpool: provision() is synchronous and does real blocking I/O
+    # (docker SDK calls, httpx.Client requests, and time.sleep() retry loops —
+    # up to ~50s worst case across both containers a Terrestrial registration
+    # starts). Calling it directly here would stall this whole process's single
+    # event loop for that entire duration, blocking every other concurrent
+    # request to origo-edge — not something the earlier version of this endpoint
+    # accounted for.
     container_status = "not_provisioned"
     if provisioner.enabled:
         try:
-            provisioner.provision(
+            await run_in_threadpool(
+                provisioner.provision,
                 device_type=body.type, serial_number=body.serial_number,
                 peer_serial_number=body.peer_serial_number,
             )

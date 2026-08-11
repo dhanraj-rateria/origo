@@ -1,44 +1,76 @@
-import { useQuery } from '@tanstack/react-query';
-import { request } from '@/shared/api/client';
+/**
+ * Shows the decrypted-payload preview for a DATA_DELIVERY job, and lets the
+ * operator download the actual bytes.
+ *
+ * Confirmed against the real jobs.py this time, not guessed:
+ * - `result_preview` ({frame_count, size_bytes}) is already attached to the job
+ *   object by GET /jobs — no extra request needed for the summary shown here.
+ * - GET /jobs/{id}/result returns the raw decrypted bytes directly
+ *   (media_type="application/octet-stream", Content-Disposition: attachment) —
+ *   NOT JSON. The shared `request()` client helper always calls response.json(),
+ *   so it can't be used for this endpoint; this component does its own fetch.
+ */
 
-interface JobDetail {
-  id: string;
-  type: string;
-  state: string;
-  failure_reason: string | null;
-  result_preview?: { frame_count: number; size_bytes: number };
+const BASE = import.meta.env.VITE_API_BASE ?? '/v1';
+
+interface ResultPreview {
+  frame_count: number | null;
+  size_bytes: number;
 }
 
-export function JobResultPanel({ jobId }: { jobId: string }) {
-  const { data: job } = useQuery({
-    queryKey: ['jobs', 'detail', jobId],
-    queryFn: () => request<JobDetail>(`/jobs/${jobId}`),
-    // Poll while the job hasn't reached a terminal state — stop once it has.
-    refetchInterval: (query) =>
-      query.state.data && ['active', 'failed', 'timed_out'].includes(query.state.data.state) ? false : 5000,
-  });
-
-  if (!job) return null;
-
-  if (job.type === 'key_exchange') {
-    return job.state === 'active'
-      ? <p className="kv-val">Key established. Material never leaves Origo Terrestrial — nothing more to show here by design.</p>
-      : <p className="kv-val">{job.state === 'failed' ? job.failure_reason : 'Waiting for the next pass…'}</p>;
-  }
-
-  if (job.type === 'data_delivery') {
-    if (!job.result_preview) {
-      return <p className="kv-val">{job.state === 'failed' ? job.failure_reason : 'No result yet — waiting for the next pass.'}</p>;
-    }
+export function JobResultPanel({
+  jobId,
+  jobState,
+  preview,
+}: {
+  jobId: string;
+  jobState: string;
+  preview?: ResultPreview;
+}) {
+  if (jobState !== 'active') {
     return (
-      <div>
-        <p className="kv-val">{job.result_preview.frame_count} frames, {job.result_preview.size_bytes} bytes</p>
-        <a href={`/v1/jobs/${jobId}/result`} download>
-          <button>Download result</button>
-        </a>
-      </div>
+      <>
+        <label className="field">Decrypted payload</label>
+        <p className="kv-val" style={{ color: 'var(--text-muted)' }}>
+          {jobState === 'failed' || jobState === 'timed_out'
+            ? 'This delivery did not complete — no payload was decrypted.'
+            : 'Waiting for this job to complete.'}
+        </p>
+      </>
     );
   }
 
-  return null;
+  if (!preview) {
+    return (
+      <>
+        <label className="field">Decrypted payload</label>
+        <div className="result-box">No result was recorded for this job.</div>
+      </>
+    );
+  }
+
+  const download = async () => {
+    const response = await fetch(`${BASE}/jobs/${jobId}/result`, { credentials: 'include' });
+    if (!response.ok) return;
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${jobId}.bin`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <>
+      <label className="field">Decrypted payload</label>
+      <p className="kv-val" style={{ color: 'var(--text-muted)' }}>
+        {preview.size_bytes} bytes
+        {preview.frame_count != null ? ` across ${preview.frame_count} frame${preview.frame_count === 1 ? '' : 's'}` : ''}{' '}
+        — decrypted on the ground side. This is the payload Origo Terrestrial decrypted, never the
+        key it used to do it.
+      </p>
+      <button className="btn-secondary" onClick={download}>Download</button>
+    </>
+  );
 }

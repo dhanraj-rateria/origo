@@ -1,44 +1,57 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { request } from '@/shared/api/client';
-import {NewJobDialog, type DeviceOption} from './NewJobDialog';
+import { NewJobDialog, type DeviceOption } from './NewJobDialog';
+import { JobResultPanel } from './JobResultPanel';
+
+interface ResultPreview {
+  frame_count: number | null;
+  size_bytes: number;
+}
 
 interface JobSummary {
-  id: string;
-  type: 'key' | 'data';
-  route: string;
+  // Confirmed via a real GET /jobs response: lowercase ("key_exchange",
+  // "data_delivery", presumably "config_push"), the opposite casing from what
+  // NewJobDialog.tsx POSTs to create one ("KEY_EXCHANGE") — jobs.py's _job_out
+  // explicitly lowercases on the way out. Different casing per direction, not a
+  // typo — check both directions independently, this is the second time this bit
+  // this file.
+  type: string;
   state: string;
+  satellite_device_id: string;
+  ground_device_id: string;
+  key_id: string | null;
   created: string;
+  failure_reason: string | null;
+  // Present only when a DATA_DELIVERY job actually has a decrypted result —
+  // confirmed directly from jobs.py's _job_out.
+  result_preview?: ResultPreview;
 }
 
 const stateLabels: Record<string, string> = {
-  active: 'Active',
-  completed: 'Completed',
   scheduled: 'Scheduled',
-  dispatched: 'Dispatched',
+  active: 'Active',
   failed: 'Failed',
-  superseded: 'Superseded',
+  timed_out: 'Timed out',
 };
 
 const stateClass: Record<string, string> = {
-  active: 'success',
-  completed: 'success',
   scheduled: 'warning',
-  dispatched: 'warning',
+  active: 'success',
   failed: 'danger',
-  superseded: 'neutral',
+  timed_out: 'danger',
 };
 
 function renderStateBadge(state: string) {
   return <span className={`badge badge-${stateClass[state] ?? 'neutral'}`}>{stateLabels[state] ?? state}</span>;
 }
 
-function renderJobTypeBadge(type: JobSummary['type']) {
-  return (
-    <span className={`badge ${type === 'key' ? 'badge-key' : 'badge-data'}`}>
-      {type === 'key' ? 'Key exchange' : 'Data delivery'}
-    </span>
-  );
+function renderJobTypeBadge(type: string) {
+  if (type === 'key_exchange') return <span className="badge badge-key">Key exchange</span>;
+  if (type === 'data_delivery') return <span className="badge badge-data">Data delivery</span>;
+  // Not guessing "config_push" is the exact string — show the raw value rather
+  // than a label that might not match.
+  return <span className="badge badge-neutral">{type}</span>;
 }
 
 export function JobsView() {
@@ -50,98 +63,96 @@ export function JobsView() {
 
   const { data: devices } = useQuery({
     queryKey: ['devices'],
-    queryFn: () => request<DeviceOption[]>('/devices'),
+    queryFn: () => request<(DeviceOption & { name: string })[]>('/devices'),
   });
 
   const [showNewJob, setShowNewJob] = useState(false);
 
+  // There's no `route` field on the real job object — built here from the device
+  // list this component already fetches for NewJobDialog.
+  const deviceName = (id: string) => devices?.find((d) => d.id === id)?.name ?? id;
+  const routeFor = (job: JobSummary) => `${deviceName(job.satellite_device_id)} \u2192 ${deviceName(job.ground_device_id)}`;
+
   return (
     <>
-      <button onClick={() => setShowNewJob(true)}>
-        + New request
-      </button>
-      {showNewJob && (
-        <NewJobDialog
-          devices={devices ?? []}
-          onClose={() => setShowNewJob(false)}
-        />
-      )}
-      <table className="table">
-      <thead>
-        <tr>
-          <th>Job ID</th>
-          <th>Type</th>
-          <th>Route</th>
-          <th>State</th>
-          <th>Created</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {(data ?? []).map((job) => (
-          <tr
-            key={job.id}
-            className="clickable"
-            onClick={() => setSelectedJob(job)}
-          >
-            <td>{job.id}</td>
-            <td>{renderJobTypeBadge(job.type)}</td>
-            <td>{job.route}</td>
-            <td>{renderStateBadge(job.state)}</td>
-            <td>{job.created}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-      {selectedJob && (
-    <div
-      className="modal-overlay"
-      onClick={() => setSelectedJob(null)}
-    >
-      <div
-        className="modal-card"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h2>{selectedJob.id}</h2>
-
-          <button
-            className="modal-close"
-            onClick={() => setSelectedJob(null)}
-          >
-            ×
-          </button>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            marginBottom: 16,
-          }}
-        >
-          {renderJobTypeBadge(selectedJob.type)}
-          {renderStateBadge(selectedJob.state)}
-        </div>
-
-        <label>Route</label>
-        <p className="kv-val">{selectedJob.route}</p>
-
-        <label>Progress</label>
-        <p className="kv-val">
-          Scheduled → Dispatched → EK sent → CT received → Active
-        </p>
-
-        <label>Key material</label>
-        <p
-          className="kv-val"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          Not exposed via platform — resides only in HSM secure storage.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button className="btn-primary" onClick={() => setShowNewJob(true)}>
+          + New request
+        </button>
       </div>
-    </div>
-  )}
+
+      {showNewJob && <NewJobDialog devices={devices ?? []} onClose={() => setShowNewJob(false)} />}
+
+      <table>
+        <thead>
+          <tr>
+            <th>Job ID</th>
+            <th>Type</th>
+            <th>Route</th>
+            <th>State</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(data ?? []).map((job) => (
+            <tr key={job.id} className="clickable" onClick={() => setSelectedJob(job)}>
+              <td className="mono">{job.id}</td>
+              <td>{renderJobTypeBadge(job.type)}</td>
+              <td>{routeFor(job)}</td>
+              <td>{renderStateBadge(job.state)}</td>
+              <td className="text-muted">{job.created}</td>
+            </tr>
+          ))}
+          {data?.length === 0 && (
+            <tr>
+              <td colSpan={5} className="text-muted">
+                No jobs yet — create a key exchange once both devices are registered and active.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {selectedJob && (
+        <div className="modal-overlay" onClick={() => setSelectedJob(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{selectedJob.id}</h2>
+              <button className="modal-close" onClick={() => setSelectedJob(null)}>×</button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {renderJobTypeBadge(selectedJob.type)}
+              {renderStateBadge(selectedJob.state)}
+            </div>
+
+            <label className="field">Route</label>
+            <p className="kv-val">{routeFor(selectedJob)}</p>
+
+            {selectedJob.failure_reason && (
+              <>
+                <label className="field">Failure reason</label>
+                <p className="kv-val" style={{ color: 'var(--danger)' }}>{selectedJob.failure_reason}</p>
+              </>
+            )}
+
+            {selectedJob.type === 'key_exchange' && (
+              <>
+                <label className="field">Key material</label>
+                <p className="kv-val" style={{ color: 'var(--text-muted)' }}>
+                  Not exposed via platform — the derived traffic key lives only in Origo
+                  Terrestrial's memory for the lifetime of that process. This page shows job
+                  and key *state*, never key material.
+                </p>
+              </>
+            )}
+
+            {selectedJob.type === 'data_delivery' && (
+              <JobResultPanel jobId={selectedJob.id} jobState={selectedJob.state} preview={selectedJob.result_preview} />
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -27,7 +27,7 @@ export function AppShell() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand"><span>Groundlink</span></div>
+        <div className="brand"><span>Origo</span></div>
         <nav>
           <div className="nav-label">Overview</div>
           {navItems.map((item) => (
@@ -47,7 +47,7 @@ export function AppShell() {
         <div className="content">
           <div className="status-strip">
             <span>Connected to edge API</span>
-            <span>{overview ? `${overview.satellites} sats · ${overview.open_alerts} alerts` : 'Loading…'}</span>
+            <span>{overview ? `${overview.satellites} satellites · ${overview.open_alerts} alerts` : 'Loading…'}</span>
           </div>
           <Outlet />
         </div>

@@ -76,3 +76,8 @@ input[type=text], select, .fixed-field{width:100%;font-family:inherit;font-size:
 .kv-val{font-size:13.5px;margin:0 0 14px;}
 .result-box{background:var(--bg-canvas);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin:0 0 14px;font-size:12.5px;line-height:1.8;}
 .mono{font-family:'IBM Plex Mono',monospace;}
+
+.status-strip {
+  display: flex;
+  justify-content: space-between;
+}

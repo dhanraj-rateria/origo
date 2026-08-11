@@ -29,7 +29,11 @@ export function NewJobDialog({
           type,
           satellite_device_id: satelliteId,
           ground_device_id: groundId,
-          kem_param_set: paramSet,
+          // Only meaningful for KEY_EXCHANGE. DATA_DELIVERY doesn't take a key_id
+          // from here either — that's resolved server-side against the pair's
+          // currently-ACTIVE key, since an operator creating a delivery job
+          // shouldn't need to know an internal key identifier to do it.
+          ...(type === 'KEY_EXCHANGE' ? { kem_param_set: paramSet } : {}),
         },
       }),
     onSuccess: async () => {
@@ -86,7 +90,19 @@ export function NewJobDialog({
           </>
         )}
 
-        {createJob.isError && <p className="error-text">Could not create the job. Check both devices are ACTIVE.</p>}
+        {type === 'DATA_DELIVERY' && (
+          <p className="field-hint" style={{ marginBottom: 14 }}>
+            Uses the currently active key for this device pair — run a key exchange first if one
+            hasn't completed yet.
+          </p>
+        )}
+
+        {createJob.isError && (
+          <p className="error-text">
+            Could not create the job. Check both devices are ACTIVE — and for a data delivery,
+            that a key exchange for this pair has already completed.
+          </p>
+        )}
 
         <button
           disabled={!satelliteId || !groundId || createJob.isPending}

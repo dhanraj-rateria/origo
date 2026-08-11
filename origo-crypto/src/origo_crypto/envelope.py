@@ -1,4 +1,3 @@
-# origo-crypto/src/origo_crypto/envelope.py
 """Same wire format as origo_station_agent.pass_executor's _parse_kem_envelope /
 _frame_ct — this is a shared contract, not a coincidence. If either side changes, both
 must change together; that's the honest reason this isn't defined once and imported —

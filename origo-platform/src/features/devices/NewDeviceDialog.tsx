@@ -2,17 +2,25 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { request } from '@/shared/api/client';
 
+interface RegisterResponse {
+  id: string;
+  name: string;
+  type: string;
+  provisioning_status: string | null;
+}
+
 export function NewDeviceDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('');
   const [type, setType] = useState<'ORIGO_SPACE' | 'ORIGO_TERRESTRIAL'>('ORIGO_SPACE');
   const [serial, setSerial] = useState('');
   const [mission, setMission] = useState('');
   const [peerSerial, setPeerSerial] = useState('');
+  const [result, setResult] = useState<RegisterResponse | null>(null);
   const queryClient = useQueryClient();
 
   const register = useMutation({
     mutationFn: () =>
-      request('/devices', {
+      request<RegisterResponse>('/devices', {
         method: 'POST',
         body: {
           name,
@@ -22,11 +30,52 @@ export function NewDeviceDialog({ onClose }: { onClose: () => void }) {
           peer_serial_number: type === 'ORIGO_TERRESTRIAL' ? peerSerial || undefined : undefined,
         },
       }),
-    onSuccess: async () => {
+    onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: ['devices'] });
-      onClose();
+      // provisioning_status is only ever non-null when the Docker device loop is
+      // enabled — that's worth a beat before closing, since "running" vs
+      // "provisioning_failed" is exactly the thing an operator needs to know
+      // right after registering. If it's null (provisioning disabled, or this is
+      // effectively how a real device would register one day), there's nothing
+      // to show — close immediately, same as before.
+      if (response.provisioning_status == null) {
+        onClose();
+      } else {
+        setResult(response);
+      }
     },
   });
+
+  if (result) {
+    const succeeded = result.provisioning_status === 'running';
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-head">
+            <h2>{succeeded ? 'Device registered' : 'Registered, container did not start'}</h2>
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
+
+          <p className="kv-val">
+            <strong>{result.name}</strong> is registered
+            {succeeded ? ' and its container is running.' : ', but its container failed to start.'}
+          </p>
+
+          {!succeeded && (
+            <div className="result-box">
+              The device row is the source of truth regardless — this only affects the local
+              Docker device-loop container. Check <code className="mono">docker ps -a</code> and{' '}
+              <code className="mono">docker logs</code> for the container matching this device's
+              serial number, or re-check that its paired device (if this is an Origo Terrestrial
+              device) is already registered and running.
+            </div>
+          )}
+
+          <button onClick={onClose}>Done</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>

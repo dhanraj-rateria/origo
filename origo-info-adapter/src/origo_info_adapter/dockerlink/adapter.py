@@ -97,10 +97,22 @@ class DockerLinkAdapter:
 
 
 class DockerLink:
-    """One 'pass' = one HTTP round trip to the Origo Space container, in each
-    direction. `frames()` yields at most one frame (the ek envelope) — a real RF pass
-    downlinks continuously; this mock represents "the satellite is reachable right
-    now," which is all a KEY_EXCHANGE step needs."""
+    """One 'pass' = one HTTP round trip (or several) to the Origo Space container.
+
+    frames() is dual-mode, decided fresh on every call by asking Origo Space whether
+    anything's staged (GET /downlink/data/status): if so, this pass drains it as a
+    DATA_DELIVERY pass; if not, it falls back to the original KEY_EXCHANGE behavior
+    (POST /downlink/trigger, one frame, done). This is a heuristic, not a real
+    job-type signal — the ContactLink Protocol's frames() takes no arguments by
+    design ("opaque bytes in, opaque bytes out"), and pass_executor.py's _run_step
+    doesn't pass one either, so there's no clean way to know which job the caller is
+    actually running. The heuristic holds for how this demo is actually operated
+    (complete a key exchange, *then* stage and deliver data — never both in the same
+    pass) but it is a real limitation: a station-agent container can't do a fresh key
+    exchange during a pass where data happens to be staged. Fixing that for real
+    means threading a job-type hint through open_link() and pass_executor.run() — not
+    something to do without pass_executor.py's own tests backing it up.
+    """
 
     def __init__(self, *, base_url: str, timeout_sec: float) -> None:
         self._base_url = base_url
@@ -131,6 +143,19 @@ class DockerLink:
     async def frames(self) -> AsyncIterator[DownlinkFrame]:
         assert self._client is not None
         try:
+            status_resp = await self._client.get(f"{self._base_url}/downlink/data/status")
+            status_resp.raise_for_status()
+            chunks_queued = status_resp.json().get("chunks_queued", 0)
+        except httpx.HTTPError as exc:
+            log.warning("dockerlink.status_check_failed", error=str(exc))
+            chunks_queued = 0
+
+        if chunks_queued > 0:
+            async for frame in self._drain_data_frames():
+                yield frame
+            return
+
+        try:
             resp = await self._client.post(f"{self._base_url}/downlink/trigger")
             resp.raise_for_status()
         except httpx.HTTPError as exc:
@@ -143,6 +168,32 @@ class DockerLink:
             encoding=FrameEncoding.BITSTREAM, data=bytes.fromhex(body["envelope_hex"]),
             first_byte_at=now, last_byte_at=now,
         )
+
+    async def _drain_data_frames(self) -> AsyncIterator[DownlinkFrame]:
+        """Raw ciphertext per frame, in strict arrival order — see
+        origo_space.server's module docstring for why there's no envelope/magic-byte
+        wrapper here: _run_data_delivery tracks its own sequence number and would
+        fail to authenticate anything with extra bytes glued on."""
+        assert self._client is not None
+        while True:
+            try:
+                resp = await self._client.post(f"{self._base_url}/downlink/data")
+            except httpx.HTTPError as exc:
+                log.warning("dockerlink.data_frame_failed", error=str(exc))
+                return
+            if resp.status_code == 404:
+                return
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                log.warning("dockerlink.data_frame_failed", error=str(exc))
+                return
+            body = resp.json()
+            now = datetime.now(UTC)
+            yield DownlinkFrame(
+                encoding=FrameEncoding.BITSTREAM, data=bytes.fromhex(body["ciphertext_hex"]),
+                first_byte_at=now, last_byte_at=now,
+            )
 
     async def send_commands(
         self,
