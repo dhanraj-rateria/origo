@@ -25,6 +25,7 @@ async def get_job_plans(
     station_ref: str,
     jobs: Annotated[JobRepository, Depends(get_job_repo)],
     devices: Annotated[DeviceRepository, Depends(get_device_repo)],
+    keys: Annotated[KeyService, Depends(get_key_service)],
 ) -> dict[str, object]:
     station = await devices.get_by_serial(station_ref)
     if station is None or station.type is not DeviceType.ORIGO_TERRESTRIAL:
@@ -32,15 +33,39 @@ async def get_job_plans(
 
     scheduled = await jobs.list(station_device_id=station.id, states=[JobState.SCHEDULED])
     now = datetime.now(UTC)
+
+    steps = []
+    for job in scheduled:
+        if job.type is JobType.DATA_DELIVERY and job.key_id is None:
+            # JobService.create_data_delivery auto-triggers a key exchange and
+            # creates this job unresolved when no ACTIVE key existed yet at request
+            # time. Resolved here, on every poll, rather than at creation, because
+            # the key exchange this depends on completes asynchronously — a
+            # separate pass, possibly a separate poll cycle — after this job
+            # already exists in Postgres. A GET route mutating rows is unusual;
+            # it's deliberate: same request, same session, a pure "resolve once and
+            # remember" backfill, not a state transition anything else needs to
+            # arbitrate.
+            candidates = await keys.get_active_for_pair(
+                satellite_device_id=job.satellite_device_id, ground_device_id=job.ground_device_id,
+            )
+            if not candidates:
+                continue   # still waiting on the key exchange — try again next poll
+            active_key = candidates[0]
+            job.key_id = active_key.id
+            job.parameters = {**job.parameters, "key_id": active_key.hsm_key_reference}
+
+        steps.append({
+            "step_id": str(uuid.uuid4()), "job_id": str(job.id), "job_type": job.type.value,
+            "expected_start_offset_sec": 0, "timeout_sec": 300,
+            "parameters": job.parameters | ({"channel_set_ref": "cs-s-band"} if job.type is JobType.KEY_EXCHANGE else {}),
+        })
+
     items = [{
         "plan_id": str(uuid.uuid4()), "ground_station_id": station_ref,
         "pass_id": str(uuid.uuid4()), "valid_from": now.isoformat(),
         "valid_until": (now + timedelta(minutes=15)).isoformat(),
-        "steps": [{
-            "step_id": str(uuid.uuid4()), "job_id": str(job.id), "job_type": job.type.value,
-            "expected_start_offset_sec": 0, "timeout_sec": 300,
-            "parameters": job.parameters | ({"channel_set_ref": "cs-s-band"} if job.type is JobType.KEY_EXCHANGE else {}),
-        } for job in scheduled],
+        "steps": steps,
         "signature": "", "signed_payload": "",
     }]
     return {"items": items}
@@ -81,11 +106,10 @@ async def push_status(
                 # event at pass end — there's no separate signal for "ek sent" or "ct
                 # received" as their own moments, so walk KEY_MACHINE through every
                 # intermediate hop here rather than widening it to allow a direct
-                # PENDING_KEYGEN -> ACTIVE jump (that jump is what produced the
-                # ILLEGAL_STATE_TRANSITION 409 this replaces). hsm_key_reference is
-                # only actually written on the final ACTIVE hop — see
-                # KeyService.advance's own `if target is KeyState.ACTIVE:` gate — so
-                # passing it on all four calls is harmless.
+                # PENDING_KEYGEN -> ACTIVE jump. hsm_key_reference is only actually
+                # written on the final ACTIVE hop — see KeyService.advance's own
+                # `if target is KeyState.ACTIVE:` gate — so passing it on all four
+                # calls is harmless.
                 for target in (KeyState.EK_SENT, KeyState.AWAITING_CT, KeyState.DECAPS_COMPLETE, KeyState.ACTIVE):
                     await keys.advance(key_id=job.key_id, target=target, hsm_key_reference=detail.get("key_id"))
             elif outcome == "FAILED":
@@ -103,6 +127,4 @@ async def push_status(
                 # Deliberately NOT revoked: a pass ending before the ek arrived
                 # doesn't mean the key is bad, just that this pass didn't carry it —
                 # leave it PENDING_KEYGEN so a later pass can retry the same key
-                # exchange. Revisit if TIMED_OUT should behave like FAILED instead;
-                # I don't have visibility into whatever retry-scheduling logic
-                # decides when a PENDING_KEYGEN key gets tried again.
+                # exchange.

@@ -83,5 +83,4 @@ class KeyService:
         unexpectedly."""
         return await self._keys.list_active_for_pair(
             satellite_device_id=satellite_device_id, ground_device_id=ground_device_id, exclude_id=None,
-        )    
-    
+        )

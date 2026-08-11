@@ -38,3 +38,6 @@ space.json
 # --- OS / editor ---
 .DS_Store
 *.swp
+
+# --- Miscellaneous ---
+**/certs/

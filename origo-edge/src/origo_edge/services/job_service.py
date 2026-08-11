@@ -32,40 +32,66 @@ class JobService:
             parameters={"kem_param_set": kem_param_set.value},
         )
 
-    async def create_data_delivery(self, *, satellite_device_id: uuid.UUID, ground_device_id: uuid.UUID) -> Job:
-        """A DATA_DELIVERY job rides on the pair's current ACTIVE key — an operator
-        creating this job (through the platform, or the API directly) shouldn't need
-        to know an internal key identifier to do it, so it's resolved here rather
-        than accepted as input.
+    async def create_data_delivery(
+        self, *, satellite_device_id: uuid.UUID, ground_device_id: uuid.UUID,
+        kem_param_set: KemParamSet = KemParamSet.ML_KEM_1024,
+    ) -> Job:
+        """A DATA_DELIVERY job rides on the pair's current ACTIVE key.
 
-        Two different identifiers get attached, deliberately not the same one:
-        job.key_id is the Postgres Key row's UUID (what this service, and the rest
-        of origo-edge, already reasons about). parameters["key_id"] is Origo
-        Terrestrial's own hsm_key_reference string (e.g. "key-fef10ac3018a") — the
-        value pass_executor.py's _run_data_delivery reads out of the JobPlanStep and
-        hands to DecryptPayload, since that's what OrigoTerrestrialServicer's
-        _active_keys dict is actually keyed by, not the database UUID. Attaching the
-        wrong one here reproduces the exact "unknown key_id" rejection this fixes.
+        If one already exists, this is exactly what it was before: resolve it now,
+        attach both identifiers a job actually needs (see the note below), done.
+
+        If none exists, this used to raise PolicyViolation and make the caller run a
+        key exchange first. It now auto-triggers one instead — but a key exchange
+        doesn't complete synchronously (it finishes on a separate pass, potentially a
+        separate poll cycle, after station-agent actually runs it), so this job is
+        created *unresolved* (key_id=None, parameters={}) rather than blocked.
+        Resolution happens lazily in edge.py's get_job_plans, on every poll, once a
+        key for this pair actually goes ACTIVE — see that function's own comment for
+        why it has to happen there and not here.
+
+        Known limitation: if the auto-triggered key exchange itself fails, this job
+        just stays SCHEDULED forever, silently retried every poll with nothing
+        visible telling the operator why. Not fixed here — would need either an
+        expiry or a way to propagate one job's failure onto a dependent job, and I'm
+        not guessing at job_lifecycle.py's state machine to build that blind.
+
+        Two different identifiers get attached once resolved, deliberately not the
+        same one: job.key_id is the Postgres Key row's UUID (what the rest of
+        origo-edge reasons about). parameters["key_id"] is Origo Terrestrial's own
+        hsm_key_reference string (e.g. "key-fef10ac3018a") — the value
+        pass_executor.py's _run_data_delivery reads out of the JobPlanStep and hands
+        to DecryptPayload, since that's what OrigoTerrestrialServicer's _active_keys
+        dict is actually keyed by, not the database UUID. Attaching the wrong one
+        here reproduces the exact "unknown key_id" rejection this whole feature
+        exists to avoid.
         """
         candidates = await self._key_service.get_active_for_pair(
             satellite_device_id=satellite_device_id, ground_device_id=ground_device_id,
         )
-        if not candidates:
-            raise PolicyViolation(
-                "no ACTIVE key for this device pair — run a key exchange and wait for it to "
-                "complete before requesting a data delivery"
+        if candidates:
+            key = candidates[0]   # the DB partial unique index guarantees at most one
+            return await self._jobs.create(
+                type=JobType.DATA_DELIVERY, satellite_device_id=satellite_device_id,
+                ground_device_id=ground_device_id, key_id=key.id,
+                parameters={"key_id": key.hsm_key_reference},
             )
-        key = candidates[0]   # the DB partial unique index guarantees at most one
-        if not key.hsm_key_reference:
-            # Shouldn't happen once a key is genuinely ACTIVE (KeyService.advance
-            # only sets ACTIVE alongside hsm_key_reference), but a job that
-            # silently can't be executed is worse than one that fails loudly here.
-            raise PolicyViolation(f"key {key.id} is ACTIVE but has no hsm_key_reference recorded")
+
+        try:
+            await self.create_key_exchange(
+                satellite_device_id=satellite_device_id, ground_device_id=ground_device_id,
+                kem_param_set=kem_param_set,
+            )
+        except PolicyViolation:
+            # create_pending's own in-flight guard rejected this — a key exchange
+            # for this pair is already running. That's fine: this data-delivery job
+            # will pick up whatever key that one produces, same as if it triggered
+            # a fresh one itself.
+            pass
 
         return await self._jobs.create(
             type=JobType.DATA_DELIVERY, satellite_device_id=satellite_device_id,
-            ground_device_id=ground_device_id, key_id=key.id,
-            parameters={"key_id": key.hsm_key_reference},
+            ground_device_id=ground_device_id, key_id=None, parameters={},
         )
 
     async def get(self, job_id: uuid.UUID) -> Job:

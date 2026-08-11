@@ -1,21 +1,21 @@
-# services/device_provisioner.py
 """Local-dev device provisioning: spins up a real Docker container for a registered
 device so the fleet the Platform shows actually corresponds to something running,
-and automates design §9's provisioning ceremony (each side's identity keypair is
-pre-provisioned; the peer's public key is "a config value someone copies over by
-hand") between a newly-registered Origo Terrestrial and the Origo Space device it's
-paired with.
+and automates design §9's provisioning ceremony between a newly-registered Origo
+Terrestrial and the Origo Space device it's paired with.
 
 Scope, deliberately: this is a local-dev/demo convenience, not a fleet-management
-system, and it doesn't touch RF or StellarStation — those stay mocked (see
-origo_info_adapter.dockerlink). What it does make real: an actual container boundary,
-an actual container-to-container network hop, and the actual WolfCryptEngine/ML-KEM/
-ML-DSA handshake code path, exercised end to end instead of only in a unit test.
+system. RF/StellarStation are represented by origo-stellarstation-mock — a real,
+separate container implementing the real stellarstation.proto contract — not by this
+process calling Origo Space directly. As of this version, this class no longer talks
+to any Origo Space container's HTTP surface at all: every identity/peer/health call
+that used to go straight to Origo Space is relayed through the mock's admin API
+instead, and the operational crypto path (origo-station-agent's real
+StellarStationAdapter, against the mock) never touches this class at all.
 
 Ordering constraint, matching the real trust model (no live channel to negotiate a
 peer key after the fact — see §2): an Origo Terrestrial device's peer_serial_number
 must name an already-registered, already-running Origo Space device. Origo Space
-always comes first. See docs/docker-device-loop.md for the full walkthrough.
+always comes first. See docs/docker-device-loop.md.
 """
 
 from __future__ import annotations
@@ -52,10 +52,9 @@ def _container_name(prefix: str, serial_number: str) -> str:
 
 class DeviceProvisioner:
     """One instance per origo-edge process, held on app.state (see main.py). Talks to
-    the *local* Docker daemon (`docker.from_env()`) — this is Docker-outside-of-
-    Docker: origo-edge itself keeps running directly on the host, exactly as the
-    Makefile's `dev-edge` target already does; it just also holds the keys to the
-    host's Docker socket."""
+    the *local* Docker daemon (`docker.from_env()`) — this process still runs directly
+    on the host exactly as `make dev-edge` always has; it just also holds the keys to
+    the host's Docker socket."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -113,7 +112,11 @@ class DeviceProvisioner:
     # -------------------------------------------------------------- provisioning --
 
     def provision_space(self, *, serial_number: str) -> None:
-        assert self._client is not None
+        """Unchanged by the StellarStation-mock rework: this is a provisioner
+        checking that the container it *just started* actually came up — not a
+        third party talking to Origo Space operationally. That distinction is what
+        the mock exists to enforce for everything that happens *after* this point,
+        not for this initial self-check."""
         self._ensure_network()
         name = _container_name("space", serial_number)
         container = self._run(
@@ -140,15 +143,37 @@ class DeviceProvisioner:
         self._ensure_network()
         space_name = _container_name("space", peer_serial_number)
         try:
-            space_container = self._client.containers.get(space_name)
+            self._client.containers.get(space_name)   # existence check only — see below, we never touch its port directly
         except NotFound as exc:
             raise ProvisioningError(
                 f"peer Origo Space device '{peer_serial_number}' has no running "
                 "container — register (and let it provision) that device first"
             ) from exc
-        space_port = self._published_port(space_container, "8080/tcp")
-        space_url = f"http://localhost:{space_port}"
-        space_identity = self._http.get(f"{space_url}/identity")
+        # Reachable from other containers on origo-net by Docker DNS — never
+        # published to the host, and after this point nothing in this class calls
+        # it directly again either.
+        space_container_url = f"http://{space_name}:8080"
+
+        # ---- start the StellarStation mock sidecar for this pairing --------------
+        ss_name = _container_name("stellarstation", serial_number)
+        ss_container = self._run(
+            image=self._settings.stellarstation_mock_image, name=ss_name,
+            environment={}, ports={"8080/tcp": None},
+        )
+        ss_admin_port = self._published_port(ss_container, "8080/tcp")
+        ss_admin_url = f"http://localhost:{ss_admin_port}"
+        self._wait_healthy(ss_admin_url)
+
+        # The mock's only source of truth for which container a satellite_id
+        # actually relates to.
+        reg = self._http.post(
+            f"{ss_admin_url}/admin/satellites/{peer_serial_number}",
+            json={"space_url": space_container_url},
+        )
+        reg.raise_for_status()
+
+        # ---- provisioning ceremony, relayed through the mock, not direct ----------
+        space_identity = self._http.get(f"{ss_admin_url}/admin/satellites/{peer_serial_number}/identity")
         space_identity.raise_for_status()
 
         terr_name = _container_name("terrestrial", serial_number)
@@ -171,12 +196,11 @@ class DeviceProvisioner:
 
         # The other half of the ceremony: Origo Space was already running when this
         # Origo Terrestrial was created, so it never received the peer key at
-        # startup — push it now. Automated equivalent of "someone copies it over by
-        # hand," not a new trust decision: the provisioner is the thing that just
-        # created both containers, so it is exactly the party a manual ceremony
-        # would trust to relay this.
+        # startup — push it now, through the mock, the same way everything else
+        # reaches Origo Space from this point on.
         peer_push = self._http.post(
-            f"{space_url}/peer", json={"public_key_hex": terr_identity.json()["public_key_hex"]},
+            f"{ss_admin_url}/admin/satellites/{peer_serial_number}/peer",
+            json={"public_key_hex": terr_identity.json()["public_key_hex"]},
         )
         peer_push.raise_for_status()
 
@@ -188,22 +212,34 @@ class DeviceProvisioner:
                 "ORIGO_STATION_SATELLITE_REF": peer_serial_number,
                 "ORIGO_STATION_ORIGO_EDGE_URL": self._settings.edge_public_url,
                 "ORIGO_STATION_ORIGO_ENDPOINT": f"{terr_name}:50051",
-                "ORIGO_RF_LINK_URL": f"http://{space_name}:8080",
+                # This is the whole swap: point the real StellarStationAdapter at
+                # the mock instead of setting ORIGO_RF_LINK_URL. build_adapter()
+                # needs no changes — StellarStationSettings().enabled being true is
+                # already what selects the real adapter; API key path, CA bundle,
+                # server-name override, and insecure=false are baked into the
+                # image's defaults (see that Dockerfile), since they're the same
+                # for every station-agent instance.
+                "ORIGO_STELLARSTATION_ENABLED": "true",
+                "ORIGO_STELLARSTATION_ENDPOINT": f"{ss_name}:50052",
             },
         )
         log.info(
             "provisioner.terrestrial_up", serial_number=serial_number,
-            peer=peer_serial_number, container=terr_name, station_agent=sa_name,
+            peer=peer_serial_number, container=terr_name, station_agent=sa_name, stellarstation_mock=ss_name,
         )
 
     def deprovision(self, *, serial_number: str, device_type: DeviceType) -> None:
         if not self.enabled:
             return
         assert self._client is not None
-        names = (
-            [_container_name("space", serial_number)] if device_type is DeviceType.ORIGO_SPACE
-            else [_container_name("terrestrial", serial_number), _container_name("station-agent", serial_number)]
-        )
+        if device_type is DeviceType.ORIGO_SPACE:
+            names = [_container_name("space", serial_number)]
+        else:
+            names = [
+                _container_name("terrestrial", serial_number),
+                _container_name("station-agent", serial_number),
+                _container_name("stellarstation", serial_number),
+            ]
         for name in names:
             try:
                 self._client.containers.get(name).remove(force=True)

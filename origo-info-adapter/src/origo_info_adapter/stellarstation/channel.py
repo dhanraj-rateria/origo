@@ -27,11 +27,17 @@ _CHANNEL_OPTIONS: list[tuple[str, int]] = [
 
 
 def build_channel(settings: StellarStationSettings) -> grpc.aio.Channel:
+    options = list(_CHANNEL_OPTIONS)
+    if settings.tls_server_name_override:
+        # See StellarStationSettings.tls_server_name_override's own docstring —
+        # this only ever gets set for a fixed-cert local mock, never in production.
+        options.append(("grpc.ssl_target_name_override", settings.tls_server_name_override))
+
     if settings.insecure:
         log.warning("stellarstation.insecure_channel", endpoint=settings.endpoint)
-        return grpc.aio.insecure_channel(settings.endpoint, options=_CHANNEL_OPTIONS)
+        return grpc.aio.insecure_channel(settings.endpoint, options=options)
     return grpc.aio.secure_channel(
-        settings.endpoint, _build_credentials(settings), options=_CHANNEL_OPTIONS
+        settings.endpoint, _build_credentials(settings), options=options
     )
 
 
@@ -60,6 +66,11 @@ def _build_credentials(settings: StellarStationSettings) -> grpc.ChannelCredenti
 
     on_demand = google_auth_jwt.OnDemandCredentials.from_signing_credentials(signer)
     plugin = AuthMetadataPlugin(on_demand, Request())
+    # root_certificates=None (the default whenever ca_bundle_path isn't set) makes
+    # grpc.ssl_channel_credentials() use the system trust store, unchanged from
+    # before — this is additive, not a behavior change for production.
+    root_certificates = settings.ca_bundle_path.read_bytes() if settings.ca_bundle_path else None
     return grpc.composite_channel_credentials(
-        grpc.ssl_channel_credentials(), grpc.metadata_call_credentials(plugin)
+        grpc.ssl_channel_credentials(root_certificates=root_certificates),
+        grpc.metadata_call_credentials(plugin),
     )

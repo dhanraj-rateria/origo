@@ -50,10 +50,11 @@ contracts:          ## CI gate: schema must match committed artifact
 up:                 ## local infra
 	docker compose up -d
 
-images:             ## build origo-space/origo-terrestrial/origo-station-agent container images
-	docker build -f origo-space/Dockerfile        -t origo-space:latest        .
-	docker build -f origo-terrestrial/Dockerfile  -t origo-terrestrial:latest  .
-	docker build -f origo-station-agent/Dockerfile -t origo-station-agent:latest .
+images:             ## build origo-space/origo-terrestrial/origo-stellarstation-mock/origo-station-agent container images
+	docker build -f origo-space/Dockerfile               -t origo-space:latest               .
+	docker build -f origo-terrestrial/Dockerfile         -t origo-terrestrial:latest         .
+	docker build -f origo-stellarstation-mock/Dockerfile -t origo-stellarstation-mock:latest .
+	docker build -f origo-station-agent/Dockerfile       -t origo-station-agent:latest       .
 
 dev-edge:
 	cd origo-edge && $(PY) uvicorn origo_edge.main:app --reload --port 8000

@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     space_image: str = "origo-space:latest"
     terrestrial_image: str = "origo-terrestrial:latest"
     station_agent_image: str = "origo-station-agent:latest"
+    stellarstation_mock_image: str = "origo-stellarstation-mock:latest"
     # How a container reaches this host-run origo-edge process. host.docker.internal
     # resolves on Docker Desktop automatically and on Linux via the extra_hosts entry
     # DeviceProvisioner adds to every container it starts (Docker >= 20.10).

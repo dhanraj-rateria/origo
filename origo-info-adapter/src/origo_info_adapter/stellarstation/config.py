@@ -38,6 +38,25 @@ class StellarStationSettings(BaseSettings):
 
     insecure: bool = False   # local fake server only; refuses non-loopback endpoints
 
+    # Trust this CA for the secure channel instead of the system default trust
+    # store. Added specifically for the Docker device-loop's StellarStation mock
+    # (origo-stellarstation-mock): it's a real, separate container, never on
+    # loopback, so `insecure=true` is correctly refused for it by
+    # `_validate()` below — this is the real alternative, not a workaround for
+    # that check. None (the default) means "use the system trust store," which is
+    # what production must do; only ever set this for a known-fake local server.
+    ca_bundle_path: Path | None = None
+
+    # grpc's TLS hostname check validates the server's cert against the name being
+    # dialed. origo-stellarstation-mock's cert is one fixed, static, shared
+    # certificate (CN=origo-stellarstation-mock) baked into every instance's image —
+    # it isn't reissued per container hostname (those vary per deployment:
+    # origo-stellarstation-sn-002, -sn-005, ...). Set this to that fixed name to
+    # match regardless of which actual hostname `endpoint` resolves. None (default)
+    # performs the normal check against `endpoint` itself, which is what production
+    # must do.
+    tls_server_name_override: str | None = None
+
     @model_validator(mode="after")
     def _validate(self) -> Self:
         if not self.enabled:

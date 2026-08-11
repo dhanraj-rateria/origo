@@ -1292,6 +1292,7 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "requests" },
     { name = "ruff" },
     { name = "types-protobuf" },
 ]
@@ -1308,6 +1309,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "requests", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "types-protobuf", marker = "extra == 'dev'" },
@@ -1341,6 +1343,7 @@ dependencies = [
     { name = "origo-info-adapter" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "requests" },
     { name = "structlog" },
     { name = "tenacity" },
 ]
@@ -1366,6 +1369,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "requests" },
     { name = "respx", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "structlog", specifier = ">=24.4" },
