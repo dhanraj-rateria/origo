@@ -29,7 +29,8 @@ class DeviceCreate(BaseModel):
 def _device_dict(d) -> dict[str, object]:
     return {
         "id": str(d.id), "name": d.name, "type": d.type.value, "mission": d.mission,
-        "status": d.status.value, "peer_serial_number": d.peer_serial_number,
+        "status": d.status.value, "serial_number": d.serial_number,
+        "peer_serial_number": d.peer_serial_number,
         # Docker device-loop only — see the model column's own docstring. Always
         # None for a real device or when provisioning is disabled; the UI's job is
         # to treat that as "no provisioning info," not "device unhealthy."

@@ -1,9 +1,9 @@
 """The GroundNetworkAdapter port.
 
 Everything in Origo that needs antenna time depends on *this*, never on a concrete
-provider. Adding KSAT means adding one implementation and one config block.
+provider.
 
-Runtime-checkable Protocols rather than ABCs: implementations (including test fakes)
+Runtime-checkable Protocols rather than ABCs: implementations
 should not have to inherit from us.
 """
 

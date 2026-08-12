@@ -51,19 +51,37 @@ class KeyService:
             raise NotFound("key", key_id)
 
         previous = key.state
+        now = utcnow()
+
+        if target is KeyState.ACTIVE:
+            # Find (and supersede) whatever was previously ACTIVE for this pair
+            # BEFORE this key's own state changes, and flush that explicitly before
+            # proceeding. uq_keys_one_active_per_pair is a real, non-deferrable
+            # unique index — checked per statement, not at commit — and two
+            # otherwise-unrelated UPDATEs in one flush batch have no guaranteed
+            # ordering. Mutating this key to ACTIVE first (the original order) meant
+            # the autoflush triggered by the query below fired while this key was
+            # already dirty as ACTIVE, writing it as a *second* active row before
+            # the old one had been demoted — the exact UniqueViolationError this
+            # fixes. Doing the query, the demotion, and an explicit flush first
+            # removes the ordering hazard entirely rather than hoping SQLAlchemy
+            # happens to sequence two unrelated UPDATEs correctly.
+            old_actives = await self._keys.list_active_for_pair(
+                satellite_device_id=key.satellite_device_id, ground_device_id=key.ground_device_id, exclude_id=key.id,
+            )
+            for old in old_actives:
+                old.state = KEY_MACHINE.transition(current=old.state, target=KeyState.SUPERSEDED)
+                old.superseded_by_key_id = key.id
+                old.retired_at = now
+            if old_actives:
+                await self._session.flush()
+
         key.state = KEY_MACHINE.transition(current=previous, target=target)
 
-        now = utcnow()
         if target is KeyState.ACTIVE:
             key.activated_at = now
             if hsm_key_reference:
                 key.hsm_key_reference = hsm_key_reference
-            for old in await self._keys.list_active_for_pair(
-                satellite_device_id=key.satellite_device_id, ground_device_id=key.ground_device_id, exclude_id=key.id,
-            ):
-                old.state = KEY_MACHINE.transition(current=old.state, target=KeyState.SUPERSEDED)
-                old.superseded_by_key_id = key.id
-                old.retired_at = now
         elif target in {KeyState.SUPERSEDED, KeyState.REVOKED, KeyState.DESTROYED}:
             key.retired_at = now
 
