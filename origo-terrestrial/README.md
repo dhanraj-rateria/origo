@@ -23,8 +23,7 @@ origo-terrestrial/
 the identical `OrigoTerrestrialService` contract - one generates the *client* stub
 (`GrpcOrigoTerrestrial`), the other the *server* stub
 (`OrigoTerrestrialServiceServicer`, which `service.py` subclasses). Duplicated, not
-imported from one side to the other, for the same reason `origo_crypto/envelope.py`'s
-wire format is duplicated: the two sides are separate deployable units and shouldn't
+imported from one side to the other, the two sides are separate deployable units and shouldn't
 depend on each other's package. If either `.proto` changes, both must change
 together - there is no tooling enforcing that today.
 

@@ -1,4 +1,4 @@
-# origo-terrestrial-sw/src/origo_terrestrial_sw/identity.py
+# origo-terrestrial/src/origo_terrestrial/identity.py
 """Dev-simplicity provisioning: each side's own keypair persists to a local file; the
 peer's public key is a config value someone copies over by hand. This is deliberately
 the software-prototype stand-in for design §9's provisioning ceremony — there's no live

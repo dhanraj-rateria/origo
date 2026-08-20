@@ -3,16 +3,16 @@
 The PQC engine both Origo Space and Origo Terrestrial drive: ML-KEM-1024, ML-DSA-87,
 AES-256-GCM, and HKDF over wolfCrypt via `ctypes`. A pure library — no network, no
 process of its own, no knowledge of which side (satellite or ground) is calling it.
-Design reference: [`PQC-HSM-Design.md`](PQC-HSM-Design.md) §1, §7.
+Design reference: [`Origo Design.md`](Origo Design.md) §1, §7.
 
 ## Structure
 
 ```
 origo-crypto/
 ├── src/origo_crypto/
-│   ├── engine.py              # CryptoEngine Protocol — the contract, not an implementation
+│   ├── engine.py              # CryptoEngine Protocol — the contract
 │   ├── envelope.py            # kem/ct wire framing (KemEnvelope, pack/parse helpers)
-│   └── wolfcrypt_engine.py    # WolfCryptEngine — the only real implementation
+│   └── wolfcrypt_engine.py    # WolfCryptEngine — the implementation
 └── tests/                     # not written yet — see Known gaps
 ```
 
